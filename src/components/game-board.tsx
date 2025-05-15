@@ -17,7 +17,7 @@ interface GameBoardProps {
   boardTitle?: string;
 }
 
-const CellContent: React.FC<{ cell: GridCell; isPlayerBoard?: boolean; isOpponentBoardAndEmpty?: boolean }> = ({ cell, isPlayerBoard, isOpponentBoardAndEmpty }) => {
+const CellContent: React.FC<{ cell: GridCell; isPlayerBoard?: boolean }> = ({ cell, isPlayerBoard }) => {
   const iconSize = "w-3 h-3 sm:w-4 sm:h-4 md:w-5 md:h-5"; 
   switch (cell.state) {
     case 'hit':
@@ -27,11 +27,13 @@ const CellContent: React.FC<{ cell: GridCell; isPlayerBoard?: boolean; isOpponen
     case 'sunk':
       return <Skull className={cn("text-destructive-foreground", iconSize)} />;
     case 'ship':
-      return isPlayerBoard ? <Ship className={cn("text-secondary-foreground opacity-80", iconSize)} /> : null;
+      // Only show ship icon if it's the player's board
+      return isPlayerBoard ? <Ship className={cn("text-secondary-foreground opacity-80", iconSize)} /> : <ShieldQuestion className={cn("text-muted-foreground opacity-30", iconSize)} />;
     case 'preview':
        return <div className="w-full h-full opacity-60 bg-primary rounded-sm" />; 
     case 'empty':
-      return isOpponentBoardAndEmpty ? <ShieldQuestion className={cn("text-muted-foreground opacity-30", iconSize)} /> : null;
+      // Show question mark for opponent's empty/unrevealed cells
+      return !isPlayerBoard ? <ShieldQuestion className={cn("text-muted-foreground opacity-30", iconSize)} /> : null;
     default:
       return null;
   }
@@ -56,7 +58,8 @@ export function GameBoard({
       case 'sunk':
         return 'bg-destructive hover:bg-destructive/90';
       case 'ship':
-        return isPlayerBoard ? 'bg-secondary hover:bg-secondary/90' : 'bg-card hover:bg-card/80';
+        // For opponent's board, 'ship' cells look like 'empty' cells until hit
+        return isPlayerBoard ? 'bg-secondary hover:bg-secondary/90' : 'bg-card hover:bg-muted/50';
       case 'preview':
         return 'cell-ship-preview'; 
       case 'empty':
@@ -97,22 +100,19 @@ export function GameBoard({
         style={{ 
           gridTemplateColumns: `minmax(16px, auto) repeat(${grid.length}, minmax(0, 1fr))`,
           gridTemplateRows: `minmax(16px, auto) repeat(${grid.length}, minmax(0, 1fr))`,
-          width: 'fit-content', // Keeps the grid snug
-          gap: '2px', // Gap for the entire grid including labels
+          width: 'fit-content', 
+          gap: '2px', 
         }}
         onMouseLeave={onCellLeave} 
       >
-        {/* Top-left empty cell */}
         <div /> 
         
-        {/* Column Headers (1-10) */}
         {Array.from({ length: grid.length }).map((_, i) => (
           <div key={`col-header-${i}`} className={cn(labelBaseClass, "p-1")}>
             {i + 1}
           </div>
         ))}
 
-        {/* Row Headers (A-J) and Cells */}
         {grid.map((row, rowIndex) => (
           <React.Fragment key={`row-fragment-${rowIndex}`}>
             <div key={`row-header-${rowIndex}`} className={cn(labelBaseClass, "p-1")}>
@@ -126,15 +126,15 @@ export function GameBoard({
                 onMouseEnter={() => onCellHover?.(rowIndex, colIndex)}
                 onDragOver={onCellDrop ? handleDragOver : undefined} 
                 onDrop={onCellDrop ? (e) => handleDrop(e, rowIndex, colIndex) : undefined} 
-                aria-label={`Cell ${String.fromCharCode(65 + rowIndex)}${colIndex + 1}: ${cell.state}. ${onCellDrop ? 'Drop target for ships.' : ''} ${onCellClick ? 'Click to fire.' : ''}`}
+                aria-label={`Cell ${String.fromCharCode(65 + rowIndex)}${colIndex + 1}: ${isPlayerBoard || cell.state === 'hit' || cell.state === 'miss' || cell.state === 'sunk' ? cell.state : 'unknown'}. ${onCellDrop ? 'Drop target for ships.' : ''} ${onCellClick ? 'Click to fire.' : ''}`}
                 className={cn(
                   'aspect-square w-full flex items-center justify-center rounded-sm transition-all duration-150 focus:outline-none focus:ring-1 focus:ring-ring focus:ring-offset-1 focus:ring-offset-background',
                   getCellClass(cell),
                   (onCellClick && !disabled) ? 'cursor-crosshair' : (onCellDrop && !disabled ? 'cursor-grab' : 'cursor-default'),
-                  'min-w-[20px] min-h-[20px] sm:min-w-[28px] sm:min-h-[28px] md:min-w-[32px] md:min-h-[32px]' // Adjusted min cell sizes
+                  'min-w-[20px] min-h-[20px] sm:min-w-[28px] sm:min-h-[28px] md:min-w-[32px] md:min-h-[32px]'
                 )}
               >
-                <CellContent cell={cell} isPlayerBoard={isPlayerBoard} isOpponentBoardAndEmpty={!isPlayerBoard && cell.state === 'empty'} />
+                <CellContent cell={cell} isPlayerBoard={isPlayerBoard} />
               </button>
             ))}
           </React.Fragment>
