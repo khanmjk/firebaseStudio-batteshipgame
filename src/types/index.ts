@@ -1,4 +1,5 @@
 
+
 export const BOARD_SIZE = 10;
 
 export type ShipName = 'Carrier' | 'Battleship' | 'Cruiser' | 'Submarine' | 'Destroyer';
@@ -55,4 +56,18 @@ export interface ShotResult {
   type: 'hit' | 'miss' | 'sunk';
   shipName?: ShipName; // Name of the ship hit or sunk
   coordinates: [number, number]; // [row, col] of the shot
+}
+
+// AI Flow Input/Output Types
+export interface GetTargetCoordinatesInput {
+  boardSize: number;
+  maxCoordinate: number; // boardSize - 1
+  hitCoordinates: Array<[number, number]>;
+  missCoordinates: Array<[number, number]>;
+}
+
+export interface GetTargetCoordinatesOutput {
+  row: number;
+  column: number;
+  reasoning: string;
 }

@@ -2,7 +2,7 @@
 "use client";
 
 import { useState, useEffect, useCallback } from 'react';
-import type { GameGrid, PlacedShip, ShipConfig, Player, GamePhase, CellState, ShotResult, ShipName } from '@/types';
+import type { GameGrid, PlacedShip, ShipConfig, Player, GamePhase, CellState, ShotResult, ShipName, GetTargetCoordinatesInput } from '@/types';
 import { BOARD_SIZE, SHIPS_TO_PLACE_CONFIG, ALL_SHIP_CONFIGS } from '@/types';
 import {
   initializeGrid,
@@ -15,12 +15,12 @@ import {
   getPreviewGrid,
   getFiredCoordinates,
 } from '@/lib/game-logic';
-import { getTargetCoordinates, type GetTargetCoordinatesInput } from '@/ai/flows/opponent-intelligence';
+import { getTargetCoordinates } from '@/ai/flows/opponent-intelligence';
 import { GameBoard } from '@/components/game-board';
 import { ShipPlacementControls } from '@/components/ship-placement-controls';
 import { GameStatusDisplay } from '@/components/game-status-display';
 import { Button } from '@/components/ui/button';
-import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
+import { Card, CardContent } from '@/components/ui/card';
 import { Brain, RotateCcw, Play, AlertTriangle } from 'lucide-react';
 import { useToast } from "@/hooks/use-toast";
 
@@ -41,7 +41,7 @@ export default function NavalStandoffPage() {
   );
   const [previewUserGrid, setPreviewUserGrid] = useState<GameGrid>(userGrid);
 
-  const [gameMessage, setGameMessage] = useState('Drag or click to place ships. Press Space to rotate.');
+  const [gameMessage, setGameMessage] = useState('Select a ship, then click or drag to place. Space to rotate.');
   const [lastShotResult, setLastShotResult] = useState<ShotResult | null>(null);
   const [aiReasoning, setAiReasoning] = useState<string | null>(null);
   const [isComputerThinking, setIsComputerThinking] = useState(false);
@@ -64,11 +64,11 @@ export default function NavalStandoffPage() {
     setSelectedShipConfig(firstShipToPlace);
     setOrientation('horizontal');
     setShipsToPlace(SHIPS_TO_PLACE_CONFIG.map(ship => ({ ...ship, placedCount: 0, totalCount: 1 })));
-    setGameMessage('Drag or click to place ships. Press Space to rotate.');
+    setGameMessage('Select a ship, then click or drag to place. Space to rotate.');
     setLastShotResult(null);
     setAiReasoning(null);
     setIsComputerThinking(false);
-  }, []); 
+  }, [shipsToPlace]); 
 
   useEffect(() => {
     resetGameState();
@@ -153,12 +153,12 @@ export default function NavalStandoffPage() {
            setGameMessage("All ships placed! Ready to start the game.");
          }
       }
-      toast({ title: "Ship Placed", description: `${shipToPlace.name} deployed.`});
+      toast({ title: "Ship Placed", description: `${shipToPlace.name} deployed at (${String.fromCharCode(65 + row)}${col + 1}).`});
     } else {
       toast({ title: "Invalid Placement", description: "Cannot place ship here. It's out of bounds or overlaps another ship.", variant: "destructive" });
     }
     setPreviewUserGrid(getPreviewGrid(updatedUserGrid, -1, -1, selectedShipConfig, orientation));
-  }, [gamePhase, userGrid, shipsToPlace, orientation, toast, selectedShipConfig]);
+  }, [gamePhase, userGrid, shipsToPlace, orientation, toast, selectedShipConfig, shipIdCounter]);
 
 
   const handleShipDragStart = useCallback((event: React.DragEvent, shipConfig: ShipConfig) => {
@@ -222,6 +222,7 @@ export default function NavalStandoffPage() {
     
     const aiInput: GetTargetCoordinatesInput = {
       boardSize: BOARD_SIZE,
+      maxCoordinate: BOARD_SIZE - 1,
       hitCoordinates: hitCoordinates,
       missCoordinates: missCoordinates,
     };
@@ -231,66 +232,60 @@ export default function NavalStandoffPage() {
       setAiReasoning(aiOutput.reasoning);
       
       const { row, column } = aiOutput;
-      const targetRow = row;
-      const targetCol = column;
+      let targetRow = row;
+      let targetCol = column;
       
+      let useFallback = false;
       if (targetRow < 0 || targetRow >= BOARD_SIZE || targetCol < 0 || targetCol >= BOARD_SIZE || 
           (userGrid[targetRow][targetCol].state !== 'empty' && userGrid[targetRow][targetCol].state !== 'ship')) {
           
         console.warn("AI targeted an invalid or already fired upon cell:", {targetRow, targetCol, cellState: userGrid[targetRow]?.[targetCol]?.state });
+        toast({ title: "AI Recalibrating", description: "AI chose an invalid target, attempting fallback.", variant: "default"});
+        useFallback = true;
+      }
         
+      if (useFallback) {
         let fallbackRow, fallbackCol, attempts = 0;
         do {
             fallbackRow = Math.floor(Math.random() * BOARD_SIZE);
             fallbackCol = Math.floor(Math.random() * BOARD_SIZE);
             attempts++;
-        } while ((userGrid[fallbackRow][fallbackCol].state !== 'empty' && userGrid[fallbackRow][fallbackCol].state !== 'ship') && attempts < BOARD_SIZE * BOARD_SIZE);
+        } while ((userGrid[fallbackRow][fallbackCol].state !== 'empty' && userGrid[fallbackRow][fallbackCol].state !== 'ship') && attempts < BOARD_SIZE * BOARD_SIZE * 2); // Increased attempts
         
-        if (attempts >= BOARD_SIZE * BOARD_SIZE) { 
-            toast({ title: "AI Error", description: "AI could not find a valid cell to target.", variant: "destructive"});
-            setCurrentPlayer('user');
-            setGameMessage("Your turn.");
+        if (attempts >= BOARD_SIZE * BOARD_SIZE * 2 || (userGrid[fallbackRow][fallbackCol].state !== 'empty' && userGrid[fallbackRow][fallbackCol].state !== 'ship')) { 
+            toast({ title: "AI Error", description: "AI could not find a valid cell to target even with fallback.", variant: "destructive"});
+            setCurrentPlayer('user'); // Give turn back to user if AI is stuck
+            setGameMessage("Your turn. AI encountered an issue.");
             setIsComputerThinking(false);
             return;
         }
-
-        const { updatedGrid, updatedShips, shotResult } = processShot(userGrid, userShips, fallbackRow, fallbackCol);
-        setUserGrid(updatedGrid);
-        setUserShips(updatedShips);
-        setLastShotResult(shotResult);
-        setGameMessage(`Opponent (fallback) fired at (${String.fromCharCode(65 + fallbackRow)}${fallbackCol + 1}). It's a ${shotResult.type.toUpperCase()}! Original AI reasoning: ${aiOutput.reasoning}`);
-        toast({ title: `Opponent (fallback) shot at (${String.fromCharCode(65 + fallbackRow)}${fallbackCol+1})`, description: `Result: ${shotResult.type.toUpperCase()}${shotResult.shipName ? ` on your ${shotResult.shipName}` : ''}`});
-        
-        if (checkGameOver(updatedShips)) {
-          setGamePhase('gameOver');
-          setWinner('computer');
-          setGameMessage("Game Over! The opponent has sunk all your ships.");
-        } else {
-          setCurrentPlayer('user');
-          setGameMessage("Your turn to fire.");
-        }
-      } else { 
-        const { updatedGrid, updatedShips, shotResult } = processShot(userGrid, userShips, targetRow, targetCol);
-        setUserGrid(updatedGrid); 
-        setUserShips(updatedShips);
-        setLastShotResult(shotResult);
-        setGameMessage(`Opponent fired at (${String.fromCharCode(65 + targetRow)}${targetCol + 1}). It's a ${shotResult.type.toUpperCase()}!`);
-        toast({ title: `Opponent shot at (${String.fromCharCode(65 + targetRow)}${targetCol+1})`, description: `Result: ${shotResult.type.toUpperCase()}${shotResult.shipName ? ` on your ${shotResult.shipName}` : ''}`});
-
-        if (checkGameOver(updatedShips)) {
-          setGamePhase('gameOver');
-          setWinner('computer');
-          setGameMessage("Game Over! The opponent has sunk all your ships.");
-        } else {
-          setCurrentPlayer('user');
-          setGameMessage("Your turn to fire.");
-        }
+        targetRow = fallbackRow;
+        targetCol = fallbackCol;
+        setGameMessage(`Opponent (fallback) is firing... Original AI reasoning: ${aiOutput.reasoning || 'N/A'}`);
       }
+
+
+      const { updatedGrid, updatedShips, shotResult } = processShot(userGrid, userShips, targetRow, targetCol);
+      setUserGrid(updatedGrid); 
+      setUserShips(updatedShips);
+      setLastShotResult(shotResult);
+      setGameMessage(`Opponent fired at (${String.fromCharCode(65 + targetRow)}${targetCol + 1}). It's a ${shotResult.type.toUpperCase()}!`);
+      toast({ title: `Opponent shot at (${String.fromCharCode(65 + targetRow)}${targetCol+1})`, description: `Result: ${shotResult.type.toUpperCase()}${shotResult.shipName ? ` on your ${shotResult.shipName}` : ''}`});
+
+      if (checkGameOver(updatedShips)) {
+        setGamePhase('gameOver');
+        setWinner('computer');
+        setGameMessage("Game Over! The opponent has sunk all your ships.");
+      } else {
+        setCurrentPlayer('user');
+        setGameMessage("Your turn to fire.");
+      }
+      
     } catch (error) {
       console.error("Error getting AI target:", error);
-      setGameMessage("Error with AI opponent. Your turn.");
-      toast({ title: "AI Error", description: "Could not get opponent's move.", variant: "destructive"});
-      setCurrentPlayer('user');
+      setGameMessage("Error with AI opponent. Could not get opponent's move. Your turn.");
+      toast({ title: "AI Error", description: "Could not get opponent's move. Your turn.", variant: "destructive"});
+      setCurrentPlayer('user'); // Give control back to user
     } finally {
       setIsComputerThinking(false);
     }
@@ -299,12 +294,12 @@ export default function NavalStandoffPage() {
   return (
     <div className="h-screen overflow-hidden flex flex-col items-center p-2 sm:p-3 lg:p-4 bg-background text-foreground">
       <header className="mb-2 sm:mb-3 text-center">
-        <h1 className="text-3xl sm:text-4xl lg:text-5xl font-bold tracking-tighter font-mono text-primary">Naval Standoff</h1>
+        <h1 className="text-2xl sm:text-3xl lg:text-4xl font-bold tracking-tighter font-mono text-primary">Naval Standoff</h1>
       </header>
 
       <main className="w-full max-w-7xl grid grid-cols-1 lg:grid-cols-2 gap-3 lg:gap-4 flex-1 overflow-hidden">
         {/* Left Column: Player's Board and Controls */}
-        <div className="space-y-3 flex flex-col">
+        <div className="space-y-3 flex flex-col min-h-0"> {/* Added min-h-0 */}
           <Card className="shadow-xl flex-shrink-0">
             <CardContent className="p-2 sm:p-3">
               <GameBoard
@@ -319,7 +314,7 @@ export default function NavalStandoffPage() {
                 onCellDrop={gamePhase === 'setup' ? handleCellDrop : undefined}
                 isPlayerBoard={true}
                 boardTitle={gamePhase === 'setup' ? "Deploy Your Fleet" : "Your Waters"}
-                disabled={gamePhase !== 'setup' && gamePhase !== 'playing' && currentPlayer !== 'user' && !(gamePhase === 'setup' && selectedShipConfig)}
+                disabled={gamePhase !== 'setup' && (currentPlayer !== 'user' || gamePhase !== 'playing') && !(gamePhase === 'setup' && selectedShipConfig)}
               />
             </CardContent>
           </Card>
@@ -339,7 +334,7 @@ export default function NavalStandoffPage() {
         </div>
 
         {/* Right Column: Opponent's Board and Game Status */}
-        <div className="space-y-3 flex flex-col">
+        <div className="space-y-3 flex flex-col min-h-0"> {/* Added min-h-0 */}
           <Card className="shadow-xl flex-shrink-0">
             <CardContent className="p-2 sm:p-3">
               <GameBoard
@@ -362,7 +357,7 @@ export default function NavalStandoffPage() {
           />
 
           {gamePhase === 'playing' && currentPlayer === 'computer' && !winner && (
-            <Button onClick={handleComputerTurn} disabled={isComputerThinking} size="lg" className="w-full font-semibold py-2 text-base sm:text-lg">
+            <Button onClick={handleComputerTurn} disabled={isComputerThinking} size="lg" className="w-full font-semibold py-2 text-base sm:text-lg mt-auto"> {/* Added mt-auto */}
               {isComputerThinking ? (
                 <><RotateCcw className="w-5 h-5 mr-2 animate-spin" /> Thinking...</>
               ) : (
@@ -371,7 +366,7 @@ export default function NavalStandoffPage() {
             </Button>
           )}
           {gamePhase === 'gameOver' && (
-            <Button onClick={resetGameState} size="lg" className="w-full font-semibold py-2 text-base sm:text-lg">
+            <Button onClick={resetGameState} size="lg" className="w-full font-semibold py-2 text-base sm:text-lg mt-auto"> {/* Added mt-auto */}
               <Play className="w-5 h-5 mr-2" />
               Play Again
             </Button>
@@ -386,7 +381,7 @@ export default function NavalStandoffPage() {
           )}
         </div>
       </main>
-      <footer className="mt-2 sm:mt-3 text-center text-xs text-muted-foreground">
+      <footer className="mt-1 sm:mt-2 text-center text-xs text-muted-foreground">
         <p>&copy; {new Date().getFullYear()} Naval Standoff. Press Space to rotate ships during setup.</p>
       </footer>
     </div>
