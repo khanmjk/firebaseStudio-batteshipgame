@@ -47,25 +47,12 @@ export function canPlaceShip(
     if (r < 0 || r >= BOARD_SIZE || c < 0 || c >= BOARD_SIZE) {
       return false; // Out of bounds
     }
+    // Check if the cell itself is already occupied by another ship part
     if (grid[r][c].shipId) {
       return false; // Overlapping another ship
     }
-    // Check adjacent cells (including diagonals for stricter placement, optional)
-    for (let dr = -1; dr <= 1; dr++) {
-      for (let dc = -1; dc <= 1; dc++) {
-        const nr = r + dr;
-        const nc = c + dc;
-        if (nr >= 0 && nr < BOARD_SIZE && nc >= 0 && nc < BOARD_SIZE) {
-          // Ensure the adjacent cell isn't part of the current ship being placed
-          const isCurrentShipPart = positions.some(p => p[0] === nr && p[1] === nc);
-          if (grid[nr][nc].shipId && !isCurrentShipPart) {
-            return false; // Too close to another ship
-          }
-        }
-      }
-    }
   }
-  return true;
+  return true; // If all checks pass, ship can be placed
 }
 
 export function placeShipOnGrid(
@@ -174,29 +161,19 @@ export function getPreviewGrid(
   orientation: 'horizontal' | 'vertical'
 ): GameGrid {
   const previewGrid = baseGrid.map(r => r.map(c => ({ ...c, state: c.state === 'preview' ? 'empty' : c.state })));
-  if (!shipConfig) return previewGrid;
+  if (!shipConfig || row < 0 || col < 0) return previewGrid; // Also check for invalid row/col for preview start
 
-  const positions = getShipPositions(row, col, shipConfig.size, orientation);
   const canPlace = canPlaceShip(baseGrid, row, col, shipConfig.size, orientation);
+  const positions = getShipPositions(row, col, shipConfig.size, orientation);
 
   positions.forEach(([r, c]) => {
     if (r >= 0 && r < BOARD_SIZE && c >= 0 && c < BOARD_SIZE) {
-      if (previewGrid[r][c].state === 'empty' || previewGrid[r][c].state === 'preview') {
-         previewGrid[r][c].state = canPlace ? 'preview' : 'empty'; // Show preview only if valid, or 'empty' to clear previous invalid preview
+      // Only mark as 'preview' if the cell is currently 'empty' and placement is valid
+      if (baseGrid[r][c].state === 'empty' || baseGrid[r][c].state === 'preview') { // allow preview to overwrite preview
+         previewGrid[r][c].state = canPlace ? 'preview' : 'empty';
       }
     }
   });
-   // if cannot place, mark invalid cells specifically? For now, just don't show preview.
-   // Actually, better to show red or something if invalid. For now, preview implies valid.
-  if(!canPlace) {
-    positions.forEach(([r,c]) => {
-      if (r >= 0 && r < BOARD_SIZE && c >= 0 && c < BOARD_SIZE) {
-        // A simple way to indicate invalid is to not change to 'preview' or make it a specific 'invalid_preview' state
-        // For simplicity, if cannot place, the preview state will not be set or will be overwritten.
-        // This part can be enhanced with specific styling for invalid previews.
-      }
-    });
-  }
 
   return previewGrid;
 }
@@ -213,3 +190,4 @@ export function getFiredCoordinates(grid: GameGrid): Array<[number, number]> {
   });
   return coordinates;
 }
+
