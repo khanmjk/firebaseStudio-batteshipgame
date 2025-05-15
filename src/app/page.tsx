@@ -41,7 +41,7 @@ export default function NavalStandoffPage() {
   );
   const [previewUserGrid, setPreviewUserGrid] = useState<GameGrid>(userGrid);
 
-  const [gameMessage, setGameMessage] = useState('Drag ships to your board. Press Space to rotate.');
+  const [gameMessage, setGameMessage] = useState('Drag or click to place ships. Press Space to rotate.');
   const [lastShotResult, setLastShotResult] = useState<ShotResult | null>(null);
   const [aiReasoning, setAiReasoning] = useState<string | null>(null);
   const [isComputerThinking, setIsComputerThinking] = useState(false);
@@ -64,7 +64,7 @@ export default function NavalStandoffPage() {
     setSelectedShipConfig(firstShipToPlace);
     setOrientation('horizontal');
     setShipsToPlace(SHIPS_TO_PLACE_CONFIG.map(ship => ({ ...ship, placedCount: 0, totalCount: 1 })));
-    setGameMessage('Drag ships to your board. Press Space to rotate.');
+    setGameMessage('Drag or click to place ships. Press Space to rotate.');
     setLastShotResult(null);
     setAiReasoning(null);
     setIsComputerThinking(false);
@@ -119,7 +119,7 @@ export default function NavalStandoffPage() {
       return;
     }
 
-    let updatedUserGrid = userGrid; // Keep a reference to potentially updated grid
+    let updatedUserGrid = userGrid; 
     if (canPlaceShip(userGrid, row, col, shipToPlace.size, orientation)) {
       const positions = getShipPositions(row, col, shipToPlace.size, orientation);
       const newShip: PlacedShip = {
@@ -132,7 +132,7 @@ export default function NavalStandoffPage() {
         orientation,
       };
       
-      updatedUserGrid = placeShipOnGrid(userGrid, newShip); // Assign to updatedUserGrid
+      updatedUserGrid = placeShipOnGrid(userGrid, newShip); 
       setUserGrid(updatedUserGrid);
       setUserShips(prev => [...prev, newShip]);
 
@@ -231,12 +231,12 @@ export default function NavalStandoffPage() {
       setAiReasoning(aiOutput.reasoning);
       
       const { row, column } = aiOutput;
-      // Basic validation for AI output to prevent crashes
+      
       if (row < 0 || row >= BOARD_SIZE || column < 0 || column >= BOARD_SIZE || 
           (userGrid[row][column].state !== 'empty' && userGrid[row][column].state !== 'ship')) {
           
         console.warn("AI targeted an invalid or already fired upon cell:", {row, column, cellState: userGrid[row]?.[column]?.state });
-        // Fallback: Simple random shot if AI fails or gives invalid target
+        
         let fallbackRow, fallbackCol, attempts = 0;
         do {
             fallbackRow = Math.floor(Math.random() * BOARD_SIZE);
@@ -244,7 +244,7 @@ export default function NavalStandoffPage() {
             attempts++;
         } while ((userGrid[fallbackRow][fallbackCol].state !== 'empty' && userGrid[fallbackRow][fallbackCol].state !== 'ship') && attempts < BOARD_SIZE * BOARD_SIZE);
         
-        if (attempts >= BOARD_SIZE * BOARD_SIZE) { // No valid cells left (should be game over)
+        if (attempts >= BOARD_SIZE * BOARD_SIZE) { 
             toast({ title: "AI Error", description: "AI could not find a valid cell to target.", variant: "destructive"});
             setCurrentPlayer('user');
             setGameMessage("Your turn.");
@@ -267,7 +267,7 @@ export default function NavalStandoffPage() {
           setCurrentPlayer('user');
           setGameMessage("Your turn to fire.");
         }
-      } else { // AI provided a valid target
+      } else { 
         const { updatedGrid, updatedShips, shotResult } = processShot(userGrid, userShips, row, column);
         setUserGrid(updatedGrid); 
         setUserShips(updatedShips);
@@ -307,12 +307,17 @@ export default function NavalStandoffPage() {
             <CardContent className="p-4 sm:p-6">
               <GameBoard
                 grid={previewUserGrid}
+                onCellClick={
+                  gamePhase === 'setup' && selectedShipConfig
+                    ? (row, col) => handlePlaceShipOnBoard(row, col, selectedShipConfig)
+                    : undefined
+                }
                 onCellHover={gamePhase === 'setup' ? handleCellHover : undefined}
                 onCellLeave={gamePhase === 'setup' ? handleCellLeave : undefined}
                 onCellDrop={gamePhase === 'setup' ? handleCellDrop : undefined}
                 isPlayerBoard={true}
                 boardTitle={gamePhase === 'setup' ? "Deploy Your Fleet" : "Your Waters"}
-                disabled={gamePhase !== 'setup' && gamePhase !== 'playing'}
+                disabled={gamePhase !== 'setup' && gamePhase !== 'playing' && currentPlayer !== 'user'}
               />
             </CardContent>
           </Card>
@@ -354,7 +359,7 @@ export default function NavalStandoffPage() {
             aiReasoning={aiReasoning}
           />
 
-          {gamePhase === 'playing' && currentPlayer === 'computer' && (
+          {gamePhase === 'playing' && currentPlayer === 'computer' && !winner && (
             <Button onClick={handleComputerTurn} disabled={isComputerThinking} size="lg" className="w-full font-semibold py-3 text-lg">
               {isComputerThinking ? (
                 <><RotateCcw className="w-6 h-6 mr-2 animate-spin" /> Thinking...</>
@@ -385,3 +390,5 @@ export default function NavalStandoffPage() {
     </div>
   );
 }
+
+    
