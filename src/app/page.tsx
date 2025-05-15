@@ -53,14 +53,14 @@ export default function NavalStandoffPage() {
     shipIdCounter = 0;
     const initialGrid = initializeGrid();
     setUserGrid(initialGrid);
-    setPreviewUserGrid(initialGrid);
+    setPreviewUserGrid(initialGrid); // Initialize previewUserGrid with initialGrid
     setComputerGrid(initializeGrid());
     setUserShips([]);
     setComputerShips([]);
     setGamePhase('setup');
     setCurrentPlayer('user');
     setWinner(null);
-    setSelectedShipConfig(SHIPS_TO_PLACE_CONFIG[0]); 
+    setSelectedShipConfig(SHIPS_TO_PLACE_CONFIG[0] || null); 
     setOrientation('horizontal');
     setShipsToPlace(SHIPS_TO_PLACE_CONFIG.map(ship => ({ ...ship, placedCount: 0, totalCount: 1 })));
     setGameMessage('Select a ship, then click or drag to place. Space to rotate.');
@@ -71,15 +71,19 @@ export default function NavalStandoffPage() {
 
   useEffect(() => {
     resetGameState();
-  }, [resetGameState]); 
+  }, [resetGameState]); // Runs only once on mount due to resetGameState's empty dependency array
   
   useEffect(() => {
     if (gamePhase === 'setup') {
-      setPreviewUserGrid(getPreviewGrid(userGrid, -1, -1, selectedShipConfig, orientation));
+        // For preview, use selectedShipConfig if available, otherwise show current userGrid
+        const shipToPreview = selectedShipConfig && shipsToPlace.find(s => s.name === selectedShipConfig.name && s.placedCount < s.totalCount) 
+                              ? selectedShipConfig 
+                              : null;
+        setPreviewUserGrid(getPreviewGrid(userGrid, -1, -1, shipToPreview, orientation));
     } else {
       setPreviewUserGrid(userGrid); 
     }
-  }, [userGrid, selectedShipConfig, orientation, gamePhase]);
+  }, [userGrid, selectedShipConfig, orientation, gamePhase, shipsToPlace]);
 
 
   const handleToggleOrientation = useCallback(() => {
@@ -102,15 +106,23 @@ export default function NavalStandoffPage() {
 
   const handleCellHover = useCallback((row: number, col: number) => {
     if (gamePhase === 'setup' && selectedShipConfig) {
-      setPreviewUserGrid(getPreviewGrid(userGrid, row, col, selectedShipConfig, orientation));
+      const shipToPreview = shipsToPlace.find(s => s.name === selectedShipConfig.name && s.placedCount < s.totalCount) 
+                            ? selectedShipConfig 
+                            : null;
+      if (shipToPreview) {
+        setPreviewUserGrid(getPreviewGrid(userGrid, row, col, shipToPreview, orientation));
+      }
     }
-  }, [gamePhase, selectedShipConfig, userGrid, orientation]);
+  }, [gamePhase, selectedShipConfig, userGrid, orientation, shipsToPlace]);
 
   const handleCellLeave = useCallback(() => {
     if (gamePhase === 'setup') {
-      setPreviewUserGrid(getPreviewGrid(userGrid, -1, -1, selectedShipConfig, orientation));
+       const shipToPreview = selectedShipConfig && shipsToPlace.find(s => s.name === selectedShipConfig.name && s.placedCount < s.totalCount) 
+                              ? selectedShipConfig 
+                              : null;
+      setPreviewUserGrid(getPreviewGrid(userGrid, -1, -1, shipToPreview, orientation));
     }
-  }, [gamePhase, userGrid, selectedShipConfig, orientation]);
+  }, [gamePhase, userGrid, selectedShipConfig, orientation, shipsToPlace]);
 
   const handlePlaceShipOnBoard = useCallback((row: number, col: number, shipToPlace: ShipConfig) => {
     if (gamePhase !== 'setup') return;
@@ -124,7 +136,7 @@ export default function NavalStandoffPage() {
     if (!currentShipPlacingStats || currentShipPlacingStats.placedCount >= currentShipPlacingStats.totalCount) {
       setGameMessage(`All ${shipToPlace.name}s placed. Select another ship or start game.`);
       toast({ title: "Placement Limit", description: `All ${shipToPlace.name}s already placed.`, variant: "default" });
-      setSelectedShipConfig(null); // Deselect if all of this type are placed
+      setSelectedShipConfig(null);
       return;
     }
 
@@ -152,7 +164,10 @@ export default function NavalStandoffPage() {
       );
       setShipsToPlace(updatedShipsToPlace);
       
-      const nextShipTypeToPlace = SHIPS_TO_PLACE_CONFIG.find(sc => updatedShipsToPlace.find(s => s.name === sc.name)!.placedCount < 1);
+      const nextShipTypeToPlace = SHIPS_TO_PLACE_CONFIG.find(sc => {
+          const stats = updatedShipsToPlace.find(s => s.name === sc.name);
+          return stats && stats.placedCount < stats.totalCount;
+      });
       
       if (nextShipTypeToPlace) {
         setSelectedShipConfig(ALL_SHIP_CONFIGS[nextShipTypeToPlace.name]);
@@ -166,9 +181,9 @@ export default function NavalStandoffPage() {
     } else {
       toast({ title: "Invalid Placement", description: "Cannot place ship here. It's out of bounds or overlaps another ship.", variant: "destructive" });
     }
-    // Ensure preview grid is updated after attempt, regardless of success
-    setPreviewUserGrid(getPreviewGrid(updatedUserGrid, -1, -1, selectedShipConfig, orientation));
-
+    
+    const shipForNextPreview = updatedShipsToPlace.every(s => s.placedCount >= s.totalCount) ? null : ALL_SHIP_CONFIGS[shipsToPlace.find(s => s.placedCount < s.totalCount)!.name];
+    setPreviewUserGrid(getPreviewGrid(updatedUserGrid, -1, -1, shipForNextPreview, orientation));
 
   }, [gamePhase, userGrid, shipsToPlace, orientation, toast, shipIdCounter, selectedShipConfig]);
 
@@ -232,9 +247,11 @@ export default function NavalStandoffPage() {
       hitCoordinates: hitCoordinates,
       missCoordinates: missCoordinates,
     };
+    console.log("AI Input:", JSON.stringify(aiInput, null, 2));
 
     try {
       const aiOutput = await getTargetCoordinates(aiInput);
+      console.log("AI Output:", aiOutput);
       setAiReasoning(aiOutput.reasoning);
       
       let { row: targetRow, column: targetCol } = aiOutput;
@@ -243,14 +260,13 @@ export default function NavalStandoffPage() {
       if (targetRow < 0 || targetRow >= BOARD_SIZE || targetCol < 0 || targetCol >= BOARD_SIZE || 
           (userGrid[targetRow][targetCol].state !== 'empty' && userGrid[targetRow][targetCol].state !== 'ship')) {
           
-        console.warn("AI targeted an invalid or already fired upon cell:", {targetRow, targetCol, cellState: userGrid[targetRow]?.[targetCol]?.state });
-        toast({ title: "AI Recalibrating", description: "AI chose an invalid target, attempting fallback.", variant: "default"});
+        console.warn("AI targeted an invalid or already fired upon cell:", {targetRow, targetCol, cellState: userGrid[targetRow]?.[targetCol]?.state, reasoning: aiOutput.reasoning });
+        toast({ title: "AI Recalibrating", description: `AI chose invalid target (${String.fromCharCode(65 + targetRow)}${targetCol + 1}). Using fallback. AI Reason: ${aiOutput.reasoning}`, variant: "default", duration: 5000});
         useFallback = true;
       }
         
       if (useFallback) {
-        let fallbackRow, fallbackCol, attempts = 0;
-        const maxAttempts = BOARD_SIZE * BOARD_SIZE * 2; // Increased max attempts
+        let fallbackRow = -1, fallbackCol = -1; // Initialize to invalid values
         const availableCells: Array<[number, number]> = [];
         for (let r = 0; r < BOARD_SIZE; r++) {
           for (let c = 0; c < BOARD_SIZE; c++) {
@@ -261,9 +277,9 @@ export default function NavalStandoffPage() {
         }
 
         if (availableCells.length === 0) {
-            toast({ title: "AI Error", description: "AI could not find any valid cell to target (no empty/ship cells left).", variant: "destructive"});
+            toast({ title: "AI Critical Error", description: "AI could not find ANY valid cell to target (board full or error). Game might be stuck.", variant: "destructive", duration: 7000});
             setCurrentPlayer('user'); 
-            setGameMessage("Your turn. AI encountered an issue finding a target.");
+            setGameMessage("Your turn. AI encountered a critical issue finding a target.");
             setIsComputerThinking(false);
             return;
         }
@@ -272,7 +288,7 @@ export default function NavalStandoffPage() {
         [fallbackRow, fallbackCol] = availableCells[randomIndex];
         targetRow = fallbackRow;
         targetCol = fallbackCol;
-        setAiReasoning(`Fallback: Randomly targeted (${String.fromCharCode(65 + targetRow)}${targetCol + 1}). Original reason: ${aiOutput.reasoning || 'N/A'}`);
+        setAiReasoning(`Fallback: Randomly targeted (${String.fromCharCode(65 + targetRow)}${targetCol + 1}). Original AI reason: ${aiOutput.reasoning || 'N/A'}`);
       }
 
 
@@ -292,10 +308,22 @@ export default function NavalStandoffPage() {
         setGameMessage("Your turn to fire.");
       }
       
-    } catch (error) {
-      console.error("Error getting AI target:", error);
-      setGameMessage("Error with AI opponent. Could not get opponent's move. Your turn.");
-      toast({ title: "AI Error", description: "Could not get opponent's move. Your turn.", variant: "destructive"});
+    } catch (error: any) {
+      console.error("Error in handleComputerTurn:", error);
+      let errorMessage = "Could not get opponent's move. Your turn.";
+      if (error && error.message) {
+        errorMessage = `AI Error: ${error.message}. Your turn.`;
+      } else if (typeof error === 'string') {
+        errorMessage = `AI Error: ${error}. Your turn.`;
+      }
+      
+      setGameMessage(errorMessage);
+      toast({ 
+        title: "AI Opponent Error",
+        description: errorMessage,
+        variant: "destructive",
+        duration: 7000
+      });
       setCurrentPlayer('user'); 
     } finally {
       setIsComputerThinking(false);
@@ -330,8 +358,8 @@ export default function NavalStandoffPage() {
                 }
                 isPlayerBoard={true}
                 boardTitle={gamePhase === 'setup' ? "Deploy Your Fleet" : "Your Waters"}
-                disabled={
-                    (gamePhase === 'setup' && !selectedShipConfig && !allShipsPlaced) || // Allow interaction if ships left to place or all placed (for start game)
+                 disabled={
+                    (gamePhase === 'setup' && !selectedShipConfig && !shipsToPlace.find(s => s.placedCount < s.totalCount)) ||
                     (gamePhase === 'playing' && (currentPlayer !== 'user' || isComputerThinking)) ||
                     gamePhase === 'gameOver'
                 }
@@ -348,8 +376,10 @@ export default function NavalStandoffPage() {
                 if (ship && shipStats && shipStats.placedCount < shipStats.totalCount) {
                   setSelectedShipConfig(ship);
                 } else {
-                  setSelectedShipConfig(null); // Deselect if all placed or ship not found
-                  toast({title: "All Placed", description: `All ${name}s have been deployed.`, variant: "default"})
+                  setSelectedShipConfig(null); 
+                  if (shipStats && shipStats.placedCount >= shipStats.totalCount) {
+                    toast({title: "All Placed", description: `All ${name}s have been deployed.`, variant: "default"})
+                  }
                 }
               }}
               onShipDragStart={handleShipDragStart}
@@ -416,5 +446,3 @@ export default function NavalStandoffPage() {
     </div>
   );
 }
-
-    
