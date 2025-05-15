@@ -65,8 +65,8 @@ const prompt = ai.definePrompt({
 
   Here's the information you have:
   - Board Size: {{boardSize}}x{{boardSize}} (indices 0 to {{maxCoordinate}})
-  - Successfully Hit Coordinates (enemy ship parts are at these locations, some may be part of already sunk ships): {{#if hitCoordinates}}{{#each hitCoordinates}}({{this.0}}, {{this.1}}){{#unless @last}}, {{/unless}}{{/each}}{{else}}None{{/if}}
-  - Missed Shot Coordinates (confirmed empty water): {{#if missCoordinates}}{{#each missCoordinates}}({{this.0}}, {{this.1}}){{#unless @last}}, {{/unless}}{{/each}}{{else}}None{{/if}}
+  - Successfully Hit Coordinates (enemy ship parts are at these locations, some may be part of already sunk ships): {{#if hitCoordinates}}{{#each hitCoordinates}}({{this.[0]}}, {{this.[1]}}){{#unless @last}}, {{/unless}}{{/each}}{{else}}None{{/if}}
+  - Missed Shot Coordinates (confirmed empty water): {{#if missCoordinates}}{{#each missCoordinates}}({{this.[0]}}, {{this.[1]}}){{#unless @last}}, {{/unless}}{{/each}}{{else}}None{{/if}}
 
   **CRITICAL INSTRUCTIONS FOR TARGETING:**
   1.  You MUST choose a 'row' and 'column' for your shot. This chosen (row, column) pair MUST NOT have been previously targeted. It MUST NOT appear in EITHER the 'Successfully Hit Coordinates' list OR the 'Missed Shot Coordinates' list.
