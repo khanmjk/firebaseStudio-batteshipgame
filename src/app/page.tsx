@@ -60,27 +60,24 @@ export default function NavalStandoffPage() {
     setGamePhase('setup');
     setCurrentPlayer('user');
     setWinner(null);
-    setSelectedShipConfig(SHIPS_TO_PLACE_CONFIG[0] || null);
+    setSelectedShipConfig(SHIPS_TO_PLACE_CONFIG[0] || null); // Select the first ship by default
     setOrientation('horizontal');
     setShipsToPlace(SHIPS_TO_PLACE_CONFIG.map(ship => ({ ...ship, placedCount: 0, totalCount: 1 })));
     setGameMessage('Select a ship, then click or drag to place. Space to rotate.');
     setLastShotResult(null);
     setAiReasoning(null);
     setIsComputerThinking(false);
-  }, []); 
+  }, []); // Empty dependency array for resetGameState
 
   useEffect(() => {
     resetGameState();
-  }, [resetGameState]);
+  }, [resetGameState]); // resetGameState dependency is correct here if resetGameState itself has a stable identity
   
   useEffect(() => {
     if (gamePhase === 'setup') {
         const shipToPreview = selectedShipConfig && shipsToPlace.find(s => s.name === selectedShipConfig.name && s.placedCount < s.totalCount) 
                               ? selectedShipConfig 
                               : null;
-        // If no ship is selected for placement (e.g. all of that type are placed, or game just started),
-        // ensure preview is based on the current userGrid without any active ship preview.
-        // The getPreviewGrid function handles row/col -1 correctly.
         setPreviewUserGrid(getPreviewGrid(userGrid, -1, -1, shipToPreview, orientation));
     } else {
       setPreviewUserGrid(userGrid); 
@@ -138,12 +135,11 @@ export default function NavalStandoffPage() {
     if (!currentShipPlacingStats || currentShipPlacingStats.placedCount >= currentShipPlacingStats.totalCount) {
       setGameMessage(`All ${shipToPlaceConfig.name}s placed. Select another ship or start game.`);
       toast({ title: "Placement Limit", description: `All ${shipToPlaceConfig.name}s already placed.`, variant: "default" });
-      setSelectedShipConfig(null); // Deselect if all are placed
-      // Preview should update based on no selected ship, handled by useEffect for previewUserGrid
+      setSelectedShipConfig(null); 
       return;
     }
-
-    let gridForPreviewDisplay = userGrid;
+    
+    let updatedUserGrid = userGrid;
     let shipStatsForPreview = shipsToPlace;
 
     if (canPlaceShip(userGrid, row, col, shipToPlaceConfig.size, orientation)) {
@@ -161,7 +157,7 @@ export default function NavalStandoffPage() {
       const newGridAfterPlacement = placeShipOnGrid(userGrid, newShip); 
       setUserGrid(newGridAfterPlacement);
       setUserShips(prev => [...prev, newShip]);
-      gridForPreviewDisplay = newGridAfterPlacement;
+      updatedUserGrid = newGridAfterPlacement; // Use this for preview base
 
       const newShipPlacementStats = shipsToPlace.map(s =>
         s.name === shipToPlaceConfig.name
@@ -169,7 +165,7 @@ export default function NavalStandoffPage() {
           : s
       );
       setShipsToPlace(newShipPlacementStats);
-      shipStatsForPreview = newShipPlacementStats;
+      shipStatsForPreview = newShipPlacementStats; // Use this for next ship determination
       
       const nextShipTypeToPlace = SHIPS_TO_PLACE_CONFIG.find(sc => {
           const stats = newShipPlacementStats.find(s => s.name === sc.name);
@@ -187,15 +183,13 @@ export default function NavalStandoffPage() {
       toast({ title: "Ship Placed", description: `${shipToPlaceConfig.name} deployed at (${String.fromCharCode(65 + row)}${col + 1}).`});
     } else {
       toast({ title: "Invalid Placement", description: "Cannot place ship here. It's out of bounds or overlaps another ship.", variant: "destructive" });
-      // gridForPreviewDisplay remains userGrid
-      // shipStatsForPreview remains shipsToPlace (from the start of the function scope)
     }
     
-    const shipConfigForNextPreview = shipStatsForPreview.every(s => s.placedCount >= s.totalCount) 
+    const shipForNextPreview = shipStatsForPreview.every(s => s.placedCount >= s.totalCount) 
         ? null 
         : ALL_SHIP_CONFIGS[shipStatsForPreview.find(s => s.placedCount < s.totalCount)!.name];
     
-    setPreviewUserGrid(getPreviewGrid(gridForPreviewDisplay, -1, -1, shipConfigForNextPreview, orientation));
+    setPreviewUserGrid(getPreviewGrid(updatedUserGrid, -1, -1, shipForNextPreview, orientation));
 
   }, [gamePhase, userGrid, shipsToPlace, orientation, toast, shipIdCounter, selectedShipConfig]);
 
@@ -268,17 +262,18 @@ export default function NavalStandoffPage() {
       
       let { row: targetRow, column: targetCol } = aiOutput;
             
-      let useFallback = false;
+      // Fallback logic now relies on the AI flow throwing an error if it picks an invalid cell
+      // The flow itself validates if the chosen cell is already hit/miss or out of bounds.
+      // So, if we reach here, aiOutput should theoretically be valid from the AI flow's perspective.
+      // We still keep a simpler client-side check for extreme paranoia or if AI flow validation gets bypassed somehow.
+
       if (targetRow < 0 || targetRow >= BOARD_SIZE || targetCol < 0 || targetCol >= BOARD_SIZE || 
           (userGrid[targetRow][targetCol].state !== 'empty' && userGrid[targetRow][targetCol].state !== 'ship')) {
           
-        console.warn("AI targeted an invalid or already fired upon cell:", {targetRow, targetCol, cellState: userGrid[targetRow]?.[targetCol]?.state, reasoning: aiOutput.reasoning });
-        toast({ title: "AI Recalibrating", description: `AI chose invalid target (${String.fromCharCode(65 + targetRow)}${targetCol + 1}). Using fallback. AI Reason: ${aiOutput.reasoning}`, variant: "default", duration: 5000});
-        useFallback = true;
-      }
+        console.warn("AI chose invalid target despite flow validation OR flow did not error. Cell:", {targetRow, targetCol, cellState: userGrid[targetRow]?.[targetCol]?.state, reasoning: aiOutput.reasoning });
+        toast({ title: "AI Recalibrating (Client Fallback)", description: `AI chose invalid target (${String.fromCharCode(65 + targetRow)}${targetCol + 1}). Using fallback. AI Reason: ${aiOutput.reasoning}`, variant: "default", duration: 5000});
         
-      if (useFallback) {
-        let fallbackRow = -1, fallbackCol = -1; // Initialize to invalid values
+        // Fallback logic (simplified, assumes AI flow should have caught this)
         const availableCells: Array<[number, number]> = [];
         for (let r = 0; r < BOARD_SIZE; r++) {
           for (let c = 0; c < BOARD_SIZE; c++) {
@@ -297,7 +292,7 @@ export default function NavalStandoffPage() {
         }
         
         const randomIndex = Math.floor(Math.random() * availableCells.length);
-        [fallbackRow, fallbackCol] = availableCells[randomIndex];
+        const [fallbackRow, fallbackCol] = availableCells[randomIndex];
         targetRow = fallbackRow;
         targetCol = fallbackCol;
         setAiReasoning(`Fallback: Randomly targeted (${String.fromCharCode(65 + targetRow)}${targetCol + 1}). Original AI reason: ${aiOutput.reasoning || 'N/A'}`);
@@ -323,11 +318,9 @@ export default function NavalStandoffPage() {
     } catch (error: any) {
       console.error("Error in handleComputerTurn:", error);
       let errorMessage = "Could not get opponent's move. Your turn.";
-      // Check if error is an object and has a message property
       if (error && typeof error.message === 'string') {
         errorMessage = `AI Error: ${error.message}. Your turn.`;
       } else if (typeof error === 'string') {
-        // Handle cases where error might be a string
         errorMessage = `AI Error: ${error}. Your turn.`;
       }
       
@@ -373,7 +366,7 @@ export default function NavalStandoffPage() {
                 isPlayerBoard={true}
                 boardTitle={gamePhase === 'setup' ? "Deploy Your Fleet" : "Your Waters"}
                  disabled={
-                    (gamePhase === 'setup' && !selectedShipConfig && shipsToPlace.every(s => s.placedCount >= s.totalCount)) || // disable if no ship selected AND all ships are placed
+                    (gamePhase === 'setup' && !selectedShipConfig && !allShipsPlaced) || // During setup, disable if no ship selected AND not all ships placed
                     (gamePhase === 'playing' && (currentPlayer !== 'user' || isComputerThinking)) ||
                     gamePhase === 'gameOver'
                 }
