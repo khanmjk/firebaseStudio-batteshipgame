@@ -1,6 +1,7 @@
 
 "use client";
 
+import * as React from 'react';
 import type { GameGrid, GridCell, CellState, ShipConfig } from '@/types';
 import { cn } from '@/lib/utils';
 import { Flame, Waves, Skull, Ship, ShieldQuestion } from 'lucide-react'; 
@@ -17,7 +18,7 @@ interface GameBoardProps {
 }
 
 const CellContent: React.FC<{ cell: GridCell; isPlayerBoard?: boolean; isOpponentBoardAndEmpty?: boolean }> = ({ cell, isPlayerBoard, isOpponentBoardAndEmpty }) => {
-  const iconSize = "w-4 h-4 sm:w-5 sm:h-5 md:w-6 md:h-6"; 
+  const iconSize = "w-3 h-3 sm:w-4 sm:h-4 md:w-5 md:h-5"; 
   switch (cell.state) {
     case 'hit':
       return <Flame className={cn("text-accent-foreground", iconSize)} />;
@@ -55,12 +56,12 @@ export function GameBoard({
       case 'sunk':
         return 'bg-destructive hover:bg-destructive/90';
       case 'ship':
-        return isPlayerBoard ? 'bg-secondary hover:bg-secondary/90' : 'bg-card hover:bg-card/80'; // Opponent ships are hidden
+        return isPlayerBoard ? 'bg-secondary hover:bg-secondary/90' : 'bg-card hover:bg-card/80';
       case 'preview':
         return 'cell-ship-preview'; 
       case 'empty':
       default:
-        return 'bg-card hover:bg-muted/50'; // Use muted for empty cells for subtle hover
+        return 'bg-card hover:bg-muted/50';
     }
   };
 
@@ -86,35 +87,58 @@ export function GameBoard({
     }
   };
 
+  const labelBaseClass = "flex items-center justify-center text-xs font-mono text-muted-foreground select-none";
+
   return (
     <div className="flex flex-col items-center w-full">
-      {boardTitle && <h2 className="text-2xl font-semibold mb-4 font-mono tracking-wider text-primary-foreground/90">{boardTitle}</h2>}
+      {boardTitle && <h2 className="text-xl sm:text-2xl font-semibold mb-2 font-mono tracking-wider text-primary-foreground/90">{boardTitle}</h2>}
       <div 
-        className="grid gap-1 bg-border p-1 rounded-md shadow-xl aspect-square w-full max-w-md sm:max-w-lg md:max-w-xl" // Ensure aspect-square and set max-width
-        style={{ gridTemplateColumns: `repeat(${grid.length}, minmax(0, 1fr))` }}
+        className="grid bg-border p-0.5 rounded-md shadow-lg"
+        style={{ 
+          gridTemplateColumns: `minmax(16px, auto) repeat(${grid.length}, minmax(0, 1fr))`,
+          gridTemplateRows: `minmax(16px, auto) repeat(${grid.length}, minmax(0, 1fr))`,
+          width: 'fit-content', // Keeps the grid snug
+          gap: '2px', // Gap for the entire grid including labels
+        }}
         onMouseLeave={onCellLeave} 
       >
-        {grid.map((row, rowIndex) =>
-          row.map((cell, colIndex) => (
-            <button
-              key={`${rowIndex}-${colIndex}`}
-              disabled={disabled && !onCellDrop} 
-              onClick={() => onCellClick?.(rowIndex, colIndex)}
-              onMouseEnter={() => onCellHover?.(rowIndex, colIndex)}
-              onDragOver={onCellDrop ? handleDragOver : undefined} 
-              onDrop={onCellDrop ? (e) => handleDrop(e, rowIndex, colIndex) : undefined} 
-              aria-label={`Cell ${rowIndex + 1}, ${colIndex + 1}: ${cell.state}. ${onCellDrop ? 'Drop target for ships.' : ''} ${onCellClick ? 'Click to fire.' : ''}`}
-              className={cn(
-                'aspect-square w-full flex items-center justify-center rounded-sm transition-all duration-150 focus:outline-none focus:ring-2 focus:ring-ring focus:ring-offset-2 focus:ring-offset-background',
-                getCellClass(cell),
-                (onCellClick && !disabled) ? 'cursor-crosshair' : (onCellDrop && !disabled ? 'cursor-grab' : 'cursor-default'),
-                'min-w-[28px] min-h-[28px] sm:min-w-[36px] sm:min-h-[36px] md:min-w-[40px] md:min-h-[40px]' // Slightly increased min cell sizes
-              )}
-            >
-              <CellContent cell={cell} isPlayerBoard={isPlayerBoard} isOpponentBoardAndEmpty={!isPlayerBoard && cell.state === 'empty'} />
-            </button>
-          ))
-        )}
+        {/* Top-left empty cell */}
+        <div /> 
+        
+        {/* Column Headers (1-10) */}
+        {Array.from({ length: grid.length }).map((_, i) => (
+          <div key={`col-header-${i}`} className={cn(labelBaseClass, "p-1")}>
+            {i + 1}
+          </div>
+        ))}
+
+        {/* Row Headers (A-J) and Cells */}
+        {grid.map((row, rowIndex) => (
+          <React.Fragment key={`row-fragment-${rowIndex}`}>
+            <div key={`row-header-${rowIndex}`} className={cn(labelBaseClass, "p-1")}>
+              {String.fromCharCode(65 + rowIndex)}
+            </div>
+            {row.map((cell, colIndex) => (
+              <button
+                key={`${rowIndex}-${colIndex}`}
+                disabled={disabled && !(onCellDrop && !disabled)}
+                onClick={() => onCellClick?.(rowIndex, colIndex)}
+                onMouseEnter={() => onCellHover?.(rowIndex, colIndex)}
+                onDragOver={onCellDrop ? handleDragOver : undefined} 
+                onDrop={onCellDrop ? (e) => handleDrop(e, rowIndex, colIndex) : undefined} 
+                aria-label={`Cell ${String.fromCharCode(65 + rowIndex)}${colIndex + 1}: ${cell.state}. ${onCellDrop ? 'Drop target for ships.' : ''} ${onCellClick ? 'Click to fire.' : ''}`}
+                className={cn(
+                  'aspect-square w-full flex items-center justify-center rounded-sm transition-all duration-150 focus:outline-none focus:ring-1 focus:ring-ring focus:ring-offset-1 focus:ring-offset-background',
+                  getCellClass(cell),
+                  (onCellClick && !disabled) ? 'cursor-crosshair' : (onCellDrop && !disabled ? 'cursor-grab' : 'cursor-default'),
+                  'min-w-[20px] min-h-[20px] sm:min-w-[28px] sm:min-h-[28px] md:min-w-[32px] md:min-h-[32px]' // Adjusted min cell sizes
+                )}
+              >
+                <CellContent cell={cell} isPlayerBoard={isPlayerBoard} isOpponentBoardAndEmpty={!isPlayerBoard && cell.state === 'empty'} />
+              </button>
+            ))}
+          </React.Fragment>
+        ))}
       </div>
     </div>
   );

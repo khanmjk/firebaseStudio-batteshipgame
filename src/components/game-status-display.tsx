@@ -4,7 +4,7 @@
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from '@/components/ui/card';
 import { AlertCircle, Info, ShieldCheck, Skull, Trophy, Target } from 'lucide-react';
 import type { Player, GamePhase, ShotResult } from '@/types';
-import { cn } from '@/lib/utils'; // Added missing import
+import { cn } from '@/lib/utils';
 
 interface GameStatusDisplayProps {
   message: string;
@@ -48,26 +48,26 @@ export function GameStatusDisplay({
   }
 
   return (
-    <Card className={cn("w-full shadow-xl font-mono", cardVariant)}>
-      <CardHeader className="pb-3 pt-4">
-        <CardTitle className="text-center text-2xl tracking-wider flex items-center justify-center gap-2">
-          <Icon className="w-7 h-7"/> 
+    <Card className={cn("w-full shadow-xl font-mono flex-grow flex flex-col", cardVariant)}>
+      <CardHeader className="pb-2 pt-3 px-3">
+        <CardTitle className="text-center text-lg sm:text-xl tracking-wider flex items-center justify-center gap-2">
+          <Icon className="w-6 h-6"/> 
           {title}
         </CardTitle>
       </CardHeader>
-      <CardContent className="text-center space-y-3 pb-4">
-        <p className="text-lg min-h-[2.5em] flex items-center justify-center">{message}</p>
+      <CardContent className="text-center space-y-2 pb-3 px-3 flex-grow flex flex-col justify-center">
+        <p className="text-base sm:text-lg min-h-[2em] flex items-center justify-center">{message}</p>
         {lastShotResult && (
-          <CardDescription className="text-sm text-muted-foreground/90">
-            Last shot ({lastShotResult.type === 'miss' ? 'by you' : 'on target'}) at ({lastShotResult.coordinates[0]+1}, {lastShotResult.coordinates[1]+1}): 
+          <CardDescription className="text-xs sm:text-sm text-muted-foreground/90">
+            Last shot at ({String.fromCharCode(65 + lastShotResult.coordinates[0])}{lastShotResult.coordinates[1]+1}): 
             <span className={`font-semibold ml-1 ${lastShotResult.type === 'hit' || lastShotResult.type === 'sunk' ? 'text-accent' : 'text-safe-miss-foreground'}`}>
               {`${lastShotResult.type.toUpperCase()}`}
             </span>
             {lastShotResult.shipName && ` on ${lastShotResult.shipName}`}
           </CardDescription>
         )}
-        {aiReasoning && gamePhase === 'playing' && (
-          <p className="text-xs italic text-muted-foreground/70 p-2 border border-dashed border-muted rounded-md bg-background/30">
+        {aiReasoning && gamePhase === 'playing' && currentPlayer === 'computer' && (
+          <p className="text-xs italic text-muted-foreground/70 p-1.5 border border-dashed border-muted rounded-md bg-background/30 mt-1">
             Opponent Intel: "{aiReasoning}"
           </p>
         )}

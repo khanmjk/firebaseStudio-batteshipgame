@@ -68,7 +68,7 @@ export default function NavalStandoffPage() {
     setLastShotResult(null);
     setAiReasoning(null);
     setIsComputerThinking(false);
-  }, []); // shipsToPlace removed as it's reset within
+  }, []); 
 
   useEffect(() => {
     resetGameState();
@@ -196,8 +196,8 @@ export default function NavalStandoffPage() {
     setComputerGrid(updatedGrid);
     setComputerShips(updatedShips);
     setLastShotResult(shotResult);
-    setGameMessage(`You fired at (${row + 1}, ${col + 1}). It's a ${shotResult.type.toUpperCase()}!`);
-    toast({ title: `Shot at (${row+1},${col+1})`, description: `Result: ${shotResult.type.toUpperCase()}${shotResult.shipName ? ` on ${shotResult.shipName}` : ''}`});
+    setGameMessage(`You fired at (${String.fromCharCode(65 + row)}${col + 1}). It's a ${shotResult.type.toUpperCase()}!`);
+    toast({ title: `Shot at (${String.fromCharCode(65 + row)}${col+1})`, description: `Result: ${shotResult.type.toUpperCase()}${shotResult.shipName ? ` on ${shotResult.shipName}` : ''}`});
 
 
     if (checkGameOver(updatedShips)) {
@@ -231,11 +231,13 @@ export default function NavalStandoffPage() {
       setAiReasoning(aiOutput.reasoning);
       
       const { row, column } = aiOutput;
+      const targetRow = row;
+      const targetCol = column;
       
-      if (row < 0 || row >= BOARD_SIZE || column < 0 || column >= BOARD_SIZE || 
-          (userGrid[row][column].state !== 'empty' && userGrid[row][column].state !== 'ship')) {
+      if (targetRow < 0 || targetRow >= BOARD_SIZE || targetCol < 0 || targetCol >= BOARD_SIZE || 
+          (userGrid[targetRow][targetCol].state !== 'empty' && userGrid[targetRow][targetCol].state !== 'ship')) {
           
-        console.warn("AI targeted an invalid or already fired upon cell:", {row, column, cellState: userGrid[row]?.[column]?.state });
+        console.warn("AI targeted an invalid or already fired upon cell:", {targetRow, targetCol, cellState: userGrid[targetRow]?.[targetCol]?.state });
         
         let fallbackRow, fallbackCol, attempts = 0;
         do {
@@ -256,8 +258,8 @@ export default function NavalStandoffPage() {
         setUserGrid(updatedGrid);
         setUserShips(updatedShips);
         setLastShotResult(shotResult);
-        setGameMessage(`Opponent (fallback) fired at (${fallbackRow + 1}, ${fallbackCol + 1}). It's a ${shotResult.type.toUpperCase()}! Original AI reasoning: ${aiOutput.reasoning}`);
-        toast({ title: `Opponent (fallback) shot at (${fallbackRow+1},${fallbackCol+1})`, description: `Result: ${shotResult.type.toUpperCase()}${shotResult.shipName ? ` on your ${shotResult.shipName}` : ''}`});
+        setGameMessage(`Opponent (fallback) fired at (${String.fromCharCode(65 + fallbackRow)}${fallbackCol + 1}). It's a ${shotResult.type.toUpperCase()}! Original AI reasoning: ${aiOutput.reasoning}`);
+        toast({ title: `Opponent (fallback) shot at (${String.fromCharCode(65 + fallbackRow)}${fallbackCol+1})`, description: `Result: ${shotResult.type.toUpperCase()}${shotResult.shipName ? ` on your ${shotResult.shipName}` : ''}`});
         
         if (checkGameOver(updatedShips)) {
           setGamePhase('gameOver');
@@ -268,12 +270,12 @@ export default function NavalStandoffPage() {
           setGameMessage("Your turn to fire.");
         }
       } else { 
-        const { updatedGrid, updatedShips, shotResult } = processShot(userGrid, userShips, row, column);
+        const { updatedGrid, updatedShips, shotResult } = processShot(userGrid, userShips, targetRow, targetCol);
         setUserGrid(updatedGrid); 
         setUserShips(updatedShips);
         setLastShotResult(shotResult);
-        setGameMessage(`Opponent fired at (${row + 1}, ${column + 1}). It's a ${shotResult.type.toUpperCase()}!`);
-        toast({ title: `Opponent shot at (${row+1},${column+1})`, description: `Result: ${shotResult.type.toUpperCase()}${shotResult.shipName ? ` on your ${shotResult.shipName}` : ''}`});
+        setGameMessage(`Opponent fired at (${String.fromCharCode(65 + targetRow)}${targetCol + 1}). It's a ${shotResult.type.toUpperCase()}!`);
+        toast({ title: `Opponent shot at (${String.fromCharCode(65 + targetRow)}${targetCol+1})`, description: `Result: ${shotResult.type.toUpperCase()}${shotResult.shipName ? ` on your ${shotResult.shipName}` : ''}`});
 
         if (checkGameOver(updatedShips)) {
           setGamePhase('gameOver');
@@ -295,16 +297,16 @@ export default function NavalStandoffPage() {
   }, [gamePhase, currentPlayer, isComputerThinking, userGrid, userShips, toast]);
 
   return (
-    <div className="min-h-screen flex flex-col items-center p-4 sm:p-6 lg:p-8 bg-background text-foreground">
-      <header className="mb-8 text-center">
-        <h1 className="text-5xl sm:text-6xl font-bold tracking-tighter font-mono text-primary">Naval Standoff</h1>
+    <div className="h-screen overflow-hidden flex flex-col items-center p-2 sm:p-3 lg:p-4 bg-background text-foreground">
+      <header className="mb-2 sm:mb-3 text-center">
+        <h1 className="text-3xl sm:text-4xl lg:text-5xl font-bold tracking-tighter font-mono text-primary">Naval Standoff</h1>
       </header>
 
-      <main className="w-full max-w-7xl grid grid-cols-1 lg:grid-cols-2 gap-6 lg:gap-8">
+      <main className="w-full max-w-7xl grid grid-cols-1 lg:grid-cols-2 gap-3 lg:gap-4 flex-1 overflow-hidden">
         {/* Left Column: Player's Board and Controls */}
-        <div className="space-y-6">
-          <Card className="shadow-xl">
-            <CardContent className="p-4 sm:p-6">
+        <div className="space-y-3 flex flex-col">
+          <Card className="shadow-xl flex-shrink-0">
+            <CardContent className="p-2 sm:p-3">
               <GameBoard
                 grid={previewUserGrid}
                 onCellClick={
@@ -317,7 +319,7 @@ export default function NavalStandoffPage() {
                 onCellDrop={gamePhase === 'setup' ? handleCellDrop : undefined}
                 isPlayerBoard={true}
                 boardTitle={gamePhase === 'setup' ? "Deploy Your Fleet" : "Your Waters"}
-                disabled={gamePhase !== 'setup' && gamePhase !== 'playing' && currentPlayer !== 'user'}
+                disabled={gamePhase !== 'setup' && gamePhase !== 'playing' && currentPlayer !== 'user' && !(gamePhase === 'setup' && selectedShipConfig)}
               />
             </CardContent>
           </Card>
@@ -337,9 +339,9 @@ export default function NavalStandoffPage() {
         </div>
 
         {/* Right Column: Opponent's Board and Game Status */}
-        <div className="space-y-6">
-          <Card className="shadow-xl">
-            <CardContent className="p-4 sm:p-6">
+        <div className="space-y-3 flex flex-col">
+          <Card className="shadow-xl flex-shrink-0">
+            <CardContent className="p-2 sm:p-3">
               <GameBoard
                 grid={computerGrid}
                 onCellClick={gamePhase === 'playing' && currentPlayer === 'user' ? handleUserShot : undefined}
@@ -360,35 +362,33 @@ export default function NavalStandoffPage() {
           />
 
           {gamePhase === 'playing' && currentPlayer === 'computer' && !winner && (
-            <Button onClick={handleComputerTurn} disabled={isComputerThinking} size="lg" className="w-full font-semibold py-3 text-lg">
+            <Button onClick={handleComputerTurn} disabled={isComputerThinking} size="lg" className="w-full font-semibold py-2 text-base sm:text-lg">
               {isComputerThinking ? (
-                <><RotateCcw className="w-6 h-6 mr-2 animate-spin" /> Thinking...</>
+                <><RotateCcw className="w-5 h-5 mr-2 animate-spin" /> Thinking...</>
               ) : (
-                <><Brain className="w-6 h-6 mr-2" /> Process Opponent's Move</>
+                <><Brain className="w-5 h-5 mr-2" /> Process Opponent's Move</>
               )}
             </Button>
           )}
           {gamePhase === 'gameOver' && (
-            <Button onClick={resetGameState} size="lg" className="w-full font-semibold py-3 text-lg">
-              <Play className="w-6 h-6 mr-2" />
+            <Button onClick={resetGameState} size="lg" className="w-full font-semibold py-2 text-base sm:text-lg">
+              <Play className="w-5 h-5 mr-2" />
               Play Again
             </Button>
           )}
           {gamePhase === 'setup' && !allShipsPlaced && (
-             <Card className="shadow-md bg-muted/30 border-dashed border-muted">
-                <CardContent className="p-4 text-center text-muted-foreground">
-                  <AlertTriangle className="w-6 h-6 mx-auto mb-2 text-amber-500" />
-                  <p>Place all your ships on the board to begin the standoff!</p>
+             <Card className="shadow-md bg-muted/30 border-dashed border-muted mt-auto">
+                <CardContent className="p-3 text-center text-muted-foreground">
+                  <AlertTriangle className="w-5 h-5 mx-auto mb-1 text-amber-500" />
+                  <p className="text-sm">Place all your ships on the board to begin the standoff!</p>
                 </CardContent>
              </Card>
           )}
         </div>
       </main>
-      <footer className="mt-12 text-center text-sm text-muted-foreground">
+      <footer className="mt-2 sm:mt-3 text-center text-xs text-muted-foreground">
         <p>&copy; {new Date().getFullYear()} Naval Standoff. Press Space to rotate ships during setup.</p>
       </footer>
     </div>
   );
 }
-
-    
