@@ -56,6 +56,7 @@ export interface ShotResult {
   type: 'hit' | 'miss' | 'sunk';
   shipName?: ShipName; // Name of the ship hit or sunk
   coordinates: [number, number]; // [row, col] of the shot
+  shipId?: string; // ID of the ship that was hit/sunk
 }
 
 // AI Flow Input/Output Types

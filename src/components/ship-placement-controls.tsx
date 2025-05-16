@@ -34,7 +34,7 @@ export function ShipPlacementControls({
   const canPlaceCurrentSelectedShip = currentSelectedShipInfo ? currentSelectedShipInfo.placedCount < currentSelectedShipInfo.totalCount : false;
 
   return (
-    <Card className="w-full max-w-md shadow-xl flex-grow flex flex-col">
+    <Card className="w-full shadow-xl flex-grow flex flex-col"> {/* Removed max-w-md */}
       <CardHeader className="py-3 px-4">
         <CardTitle className="font-mono tracking-wider text-center text-lg sm:text-xl">Ship Deployment</CardTitle>
       </CardHeader>

@@ -47,12 +47,11 @@ export function canPlaceShip(
     if (r < 0 || r >= BOARD_SIZE || c < 0 || c >= BOARD_SIZE) {
       return false; // Out of bounds
     }
-    // Check if the cell itself is already occupied by another ship part
     if (grid[r][c].shipId) {
       return false; // Overlapping another ship
     }
   }
-  return true; // If all checks pass, ship can be placed
+  return true;
 }
 
 export function placeShipOnGrid(
@@ -107,22 +106,21 @@ export function processShot(
   targetShips: PlacedShip[],
   row: number,
   col: number
-): { updatedGrid: GameGrid; updatedShips: PlacedShip[]; shotResult: ShotResult, hitShipId?: string } {
+): { updatedGrid: GameGrid; updatedShips: PlacedShip[]; shotResult: ShotResult } {
   const newGrid = targetGrid.map(r => r.map(c => ({ ...c })));
-  const newShips = targetShips.map(s => ({ ...s, hits: [...s.hits] }));
+  const newShips = targetShips.map(s => ({ ...s, hits: [...s.hits] })); // Ensure hits array is copied
   const cell = newGrid[row][col];
   let shotResultType: ShotResult['type'] = 'miss';
   let hitShipName: ShipName | undefined = undefined;
-  let hitShipId: string | undefined = undefined;
+  let actualHitShipId: string | undefined = undefined;
 
   if (cell.shipId) {
     const shipIndex = newShips.findIndex(s => s.id === cell.shipId);
     if (shipIndex !== -1) {
       const ship = newShips[shipIndex];
-      hitShipId = ship.id;
+      actualHitShipId = ship.id;
       hitShipName = ship.name;
       
-      // Avoid duplicate hits
       if (!ship.hits.some(h => h[0] === row && h[1] === col)) {
         ship.hits.push([row, col]);
       }
@@ -130,23 +128,22 @@ export function processShot(
       if (ship.hits.length === ship.size) {
         ship.isSunk = true;
         shotResultType = 'sunk';
-        ship.positions.forEach(([r, c]) => {
-          newGrid[r][c].state = 'sunk';
+        ship.positions.forEach(([rPos, cPos]) => {
+          newGrid[rPos][cPos].state = 'sunk';
         });
       } else {
         shotResultType = 'hit';
         newGrid[row][col].state = 'hit';
       }
     } else {
-      // Ship ID exists but ship not found in list - should not happen
-      newGrid[row][col].state = 'miss';
+      newGrid[row][col].state = 'miss'; // Should not happen if shipId is valid
     }
   } else {
     newGrid[row][col].state = 'miss';
   }
   
-  const shotResult: ShotResult = { type: shotResultType, coordinates: [row, col], shipName: hitShipName };
-  return { updatedGrid: newGrid, updatedShips: newShips, shotResult, hitShipId };
+  const shotResult: ShotResult = { type: shotResultType, coordinates: [row, col], shipName: hitShipName, shipId: actualHitShipId };
+  return { updatedGrid: newGrid, updatedShips: newShips, shotResult };
 }
 
 export function checkGameOver(ships: PlacedShip[]): boolean {
@@ -161,16 +158,15 @@ export function getPreviewGrid(
   orientation: 'horizontal' | 'vertical'
 ): GameGrid {
   const previewGrid = baseGrid.map(r => r.map(c => ({ ...c, state: c.state === 'preview' ? 'empty' : c.state })));
-  if (!shipConfig || row < 0 || col < 0) return previewGrid; // Also check for invalid row/col for preview start
+  if (!shipConfig || row < 0 || col < 0) return previewGrid;
 
   const canPlace = canPlaceShip(baseGrid, row, col, shipConfig.size, orientation);
   const positions = getShipPositions(row, col, shipConfig.size, orientation);
 
   positions.forEach(([r, c]) => {
     if (r >= 0 && r < BOARD_SIZE && c >= 0 && c < BOARD_SIZE) {
-      // Only mark as 'preview' if the cell is currently 'empty' and placement is valid
-      if (baseGrid[r][c].state === 'empty' || baseGrid[r][c].state === 'preview') { // allow preview to overwrite preview
-         previewGrid[r][c].state = canPlace ? 'preview' : 'empty';
+      if (baseGrid[r][c].state === 'empty' || baseGrid[r][c].state === 'preview') {
+         previewGrid[r][c].state = canPlace ? 'preview' : 'empty'; 
       }
     }
   });
@@ -178,7 +174,6 @@ export function getPreviewGrid(
   return previewGrid;
 }
 
-// Helper to get all fired shots (hits and misses) from a grid
 export function getFiredCoordinates(grid: GameGrid): Array<[number, number]> {
   const coordinates: Array<[number, number]> = [];
   grid.forEach(row => {
@@ -190,4 +185,3 @@ export function getFiredCoordinates(grid: GameGrid): Array<[number, number]> {
   });
   return coordinates;
 }
-

@@ -45,6 +45,8 @@ export default function NavalStandoffPage() {
   const [lastShotResult, setLastShotResult] = useState<ShotResult | null>(null);
   const [aiReasoning, setAiReasoning] = useState<string | null>(null);
   const [isComputerThinking, setIsComputerThinking] = useState(false);
+  const [sunkShipAnimationTarget, setSunkShipAnimationTarget] = useState<{ shipId: string; board: 'user' | 'computer' } | null>(null);
+
 
   const { toast } = useToast();
   let shipIdCounter = 0; 
@@ -60,18 +62,19 @@ export default function NavalStandoffPage() {
     setGamePhase('setup');
     setCurrentPlayer('user');
     setWinner(null);
-    setSelectedShipConfig(SHIPS_TO_PLACE_CONFIG[0] || null); // Select the first ship by default
+    setSelectedShipConfig(SHIPS_TO_PLACE_CONFIG[0] || null);
     setOrientation('horizontal');
     setShipsToPlace(SHIPS_TO_PLACE_CONFIG.map(ship => ({ ...ship, placedCount: 0, totalCount: 1 })));
     setGameMessage('Select a ship, then click or drag to place. Space to rotate.');
     setLastShotResult(null);
     setAiReasoning(null);
     setIsComputerThinking(false);
-  }, []); // Empty dependency array for resetGameState
+    setSunkShipAnimationTarget(null);
+  }, []); 
 
   useEffect(() => {
     resetGameState();
-  }, [resetGameState]); // resetGameState dependency is correct here if resetGameState itself has a stable identity
+  }, [resetGameState]); 
   
   useEffect(() => {
     if (gamePhase === 'setup') {
@@ -83,6 +86,15 @@ export default function NavalStandoffPage() {
       setPreviewUserGrid(userGrid); 
     }
   }, [userGrid, selectedShipConfig, orientation, gamePhase, shipsToPlace]);
+
+  useEffect(() => {
+    if (sunkShipAnimationTarget) {
+      const timer = setTimeout(() => {
+        setSunkShipAnimationTarget(null);
+      }, 1500); // Match animation duration
+      return () => clearTimeout(timer);
+    }
+  }, [sunkShipAnimationTarget]);
 
 
   const handleToggleOrientation = useCallback(() => {
@@ -139,8 +151,9 @@ export default function NavalStandoffPage() {
       return;
     }
     
-    let updatedUserGrid = userGrid;
+    let gridForPreviewDisplay = userGrid;
     let shipStatsForPreview = shipsToPlace;
+
 
     if (canPlaceShip(userGrid, row, col, shipToPlaceConfig.size, orientation)) {
       const positions = getShipPositions(row, col, shipToPlaceConfig.size, orientation);
@@ -157,7 +170,7 @@ export default function NavalStandoffPage() {
       const newGridAfterPlacement = placeShipOnGrid(userGrid, newShip); 
       setUserGrid(newGridAfterPlacement);
       setUserShips(prev => [...prev, newShip]);
-      updatedUserGrid = newGridAfterPlacement; // Use this for preview base
+      gridForPreviewDisplay = newGridAfterPlacement;
 
       const newShipPlacementStats = shipsToPlace.map(s =>
         s.name === shipToPlaceConfig.name
@@ -165,7 +178,7 @@ export default function NavalStandoffPage() {
           : s
       );
       setShipsToPlace(newShipPlacementStats);
-      shipStatsForPreview = newShipPlacementStats; // Use this for next ship determination
+      shipStatsForPreview = newShipPlacementStats;
       
       const nextShipTypeToPlace = SHIPS_TO_PLACE_CONFIG.find(sc => {
           const stats = newShipPlacementStats.find(s => s.name === sc.name);
@@ -185,11 +198,11 @@ export default function NavalStandoffPage() {
       toast({ title: "Invalid Placement", description: "Cannot place ship here. It's out of bounds or overlaps another ship.", variant: "destructive" });
     }
     
-    const shipForNextPreview = shipStatsForPreview.every(s => s.placedCount >= s.totalCount) 
+    const shipConfigForNextPreview = shipStatsForPreview.every(s => s.placedCount >= s.totalCount) 
         ? null 
         : ALL_SHIP_CONFIGS[shipStatsForPreview.find(s => s.placedCount < s.totalCount)!.name];
     
-    setPreviewUserGrid(getPreviewGrid(updatedUserGrid, -1, -1, shipForNextPreview, orientation));
+    setPreviewUserGrid(getPreviewGrid(gridForPreviewDisplay, -1, -1, shipConfigForNextPreview, orientation));
 
   }, [gamePhase, userGrid, shipsToPlace, orientation, toast, shipIdCounter, selectedShipConfig]);
 
@@ -226,6 +239,9 @@ export default function NavalStandoffPage() {
     setGameMessage(`You fired at (${String.fromCharCode(65 + row)}${col + 1}). It's a ${shotResult.type.toUpperCase()}!`);
     toast({ title: `Shot at (${String.fromCharCode(65 + row)}${col+1})`, description: `Result: ${shotResult.type.toUpperCase()}${shotResult.shipName ? ` on ${shotResult.shipName}` : ''}`});
 
+    if (shotResult.type === 'sunk' && shotResult.shipId) {
+        setSunkShipAnimationTarget({ shipId: shotResult.shipId, board: 'computer' });
+    }
 
     if (checkGameOver(updatedShips)) {
       setGamePhase('gameOver');
@@ -243,6 +259,7 @@ export default function NavalStandoffPage() {
 
     setIsComputerThinking(true);
     setGameMessage("Opponent is aiming...");
+    setAiReasoning(null); // Clear previous reasoning
 
     const hitCoordinates = getFiredCoordinates(userGrid).filter(coord => userGrid[coord[0]][coord[1]].state === 'hit' || userGrid[coord[0]][coord[1]].state === 'sunk');
     const missCoordinates = getFiredCoordinates(userGrid).filter(coord => userGrid[coord[0]][coord[1]].state === 'miss');
@@ -261,19 +278,15 @@ export default function NavalStandoffPage() {
       setAiReasoning(aiOutput.reasoning);
       
       let { row: targetRow, column: targetCol } = aiOutput;
-            
-      // Fallback logic now relies on the AI flow throwing an error if it picks an invalid cell
-      // The flow itself validates if the chosen cell is already hit/miss or out of bounds.
-      // So, if we reach here, aiOutput should theoretically be valid from the AI flow's perspective.
-      // We still keep a simpler client-side check for extreme paranoia or if AI flow validation gets bypassed somehow.
 
+      // Server-side validation in the flow should prevent most invalid moves.
+      // This client-side check is an additional safety net.
       if (targetRow < 0 || targetRow >= BOARD_SIZE || targetCol < 0 || targetCol >= BOARD_SIZE || 
           (userGrid[targetRow][targetCol].state !== 'empty' && userGrid[targetRow][targetCol].state !== 'ship')) {
           
         console.warn("AI chose invalid target despite flow validation OR flow did not error. Cell:", {targetRow, targetCol, cellState: userGrid[targetRow]?.[targetCol]?.state, reasoning: aiOutput.reasoning });
         toast({ title: "AI Recalibrating (Client Fallback)", description: `AI chose invalid target (${String.fromCharCode(65 + targetRow)}${targetCol + 1}). Using fallback. AI Reason: ${aiOutput.reasoning}`, variant: "default", duration: 5000});
         
-        // Fallback logic (simplified, assumes AI flow should have caught this)
         const availableCells: Array<[number, number]> = [];
         for (let r = 0; r < BOARD_SIZE; r++) {
           for (let c = 0; c < BOARD_SIZE; c++) {
@@ -298,13 +311,16 @@ export default function NavalStandoffPage() {
         setAiReasoning(`Fallback: Randomly targeted (${String.fromCharCode(65 + targetRow)}${targetCol + 1}). Original AI reason: ${aiOutput.reasoning || 'N/A'}`);
       }
 
-
       const { updatedGrid, updatedShips, shotResult } = processShot(userGrid, userShips, targetRow, targetCol);
       setUserGrid(updatedGrid); 
       setUserShips(updatedShips);
       setLastShotResult(shotResult);
       setGameMessage(`Opponent fired at (${String.fromCharCode(65 + targetRow)}${targetCol + 1}). It's a ${shotResult.type.toUpperCase()}!`);
       toast({ title: `Opponent shot at (${String.fromCharCode(65 + targetRow)}${targetCol+1})`, description: `Result: ${shotResult.type.toUpperCase()}${shotResult.shipName ? ` on your ${shotResult.shipName}` : ''}`});
+
+      if (shotResult.type === 'sunk' && shotResult.shipId) {
+        setSunkShipAnimationTarget({ shipId: shotResult.shipId, board: 'user' });
+      }
 
       if (checkGameOver(updatedShips)) {
         setGamePhase('gameOver');
@@ -366,10 +382,11 @@ export default function NavalStandoffPage() {
                 isPlayerBoard={true}
                 boardTitle={gamePhase === 'setup' ? "Deploy Your Fleet" : "Your Waters"}
                  disabled={
-                    (gamePhase === 'setup' && !selectedShipConfig && !allShipsPlaced) || // During setup, disable if no ship selected AND not all ships placed
+                    (gamePhase === 'setup' && (!selectedShipConfig && !allShipsPlaced)) ||
                     (gamePhase === 'playing' && (currentPlayer !== 'user' || isComputerThinking)) ||
                     gamePhase === 'gameOver'
                 }
+                sunkShipAnimationTrigger={sunkShipAnimationTarget?.board === 'user' ? sunkShipAnimationTarget.shipId : null}
               />
             </CardContent>
           </Card>
@@ -409,6 +426,7 @@ export default function NavalStandoffPage() {
                 isPlayerBoard={false}
                 boardTitle="Enemy Waters"
                 disabled={gamePhase !== 'playing' || currentPlayer !== 'user' || isComputerThinking}
+                sunkShipAnimationTrigger={sunkShipAnimationTarget?.board === 'computer' ? sunkShipAnimationTarget.shipId : null}
               />
             </CardContent>
           </Card>
@@ -453,4 +471,3 @@ export default function NavalStandoffPage() {
     </div>
   );
 }
-

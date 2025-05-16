@@ -15,6 +15,7 @@ interface GameBoardProps {
   isPlayerBoard?: boolean;
   disabled?: boolean;
   boardTitle?: string;
+  sunkShipAnimationTrigger?: string | null; // ID of the ship to animate
 }
 
 const CellContent: React.FC<{ cell: GridCell; isPlayerBoard?: boolean }> = ({ cell, isPlayerBoard }) => {
@@ -27,12 +28,10 @@ const CellContent: React.FC<{ cell: GridCell; isPlayerBoard?: boolean }> = ({ ce
     case 'sunk':
       return <Skull className={cn("text-destructive-foreground", iconSize)} />;
     case 'ship':
-      // Only show ship icon if it's the player's board
       return isPlayerBoard ? <Ship className={cn("text-secondary-foreground opacity-80", iconSize)} /> : <ShieldQuestion className={cn("text-muted-foreground opacity-30", iconSize)} />;
     case 'preview':
        return <div className="w-full h-full opacity-60 bg-primary rounded-sm" />; 
     case 'empty':
-      // Show question mark for opponent's empty/unrevealed cells
       return !isPlayerBoard ? <ShieldQuestion className={cn("text-muted-foreground opacity-30", iconSize)} /> : null;
     default:
       return null;
@@ -47,9 +46,11 @@ export function GameBoard({
   onCellDrop,
   isPlayerBoard = false, 
   disabled = false, 
-  boardTitle 
+  boardTitle,
+  sunkShipAnimationTrigger
 }: GameBoardProps) {
-  const getCellClass = (cell: GridCell): string => {
+  
+  const getCellStyleClass = (cell: GridCell): string => {
     switch (cell.state) {
       case 'hit':
         return 'bg-accent hover:bg-accent/90';
@@ -58,7 +59,6 @@ export function GameBoard({
       case 'sunk':
         return 'bg-destructive hover:bg-destructive/90';
       case 'ship':
-        // For opponent's board, 'ship' cells look like 'empty' cells until hit
         return isPlayerBoard ? 'bg-secondary hover:bg-secondary/90' : 'bg-card hover:bg-muted/50';
       case 'preview':
         return 'cell-ship-preview'; 
@@ -94,7 +94,7 @@ export function GameBoard({
 
   return (
     <div className="flex flex-col items-center w-full">
-      {boardTitle && <h2 className="text-xl sm:text-2xl font-semibold mb-2 font-mono tracking-wider text-primary-foreground/90">{boardTitle}</h2>}
+      {boardTitle && <h2 className="text-xl sm:text-2xl font-semibold mb-2 font-mono tracking-wider text-primary">{boardTitle}</h2>}
       <div 
         className="grid bg-border p-0.5 rounded-md shadow-lg"
         style={{ 
@@ -129,9 +129,10 @@ export function GameBoard({
                 aria-label={`Cell ${String.fromCharCode(65 + rowIndex)}${colIndex + 1}: ${isPlayerBoard || cell.state === 'hit' || cell.state === 'miss' || cell.state === 'sunk' ? cell.state : 'unknown'}. ${onCellDrop ? 'Drop target for ships.' : ''} ${onCellClick ? 'Click to fire.' : ''}`}
                 className={cn(
                   'aspect-square w-full flex items-center justify-center rounded-sm transition-all duration-150 focus:outline-none focus:ring-1 focus:ring-ring focus:ring-offset-1 focus:ring-offset-background',
-                  getCellClass(cell),
+                  getCellStyleClass(cell),
                   (onCellClick && !disabled) ? 'cursor-crosshair' : (onCellDrop && !disabled ? 'cursor-grab' : 'cursor-default'),
-                  'min-w-[20px] min-h-[20px] sm:min-w-[28px] sm:min-h-[28px] md:min-w-[32px] md:min-h-[32px]'
+                  'min-w-[20px] min-h-[20px] sm:min-w-[28px] sm:min-h-[28px] md:min-w-[32px] md:min-h-[32px]',
+                  (cell.state === 'sunk' && cell.shipId && cell.shipId === sunkShipAnimationTrigger) && 'animate-sunk-pulse z-10'
                 )}
               >
                 <CellContent cell={cell} isPlayerBoard={isPlayerBoard} />

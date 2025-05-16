@@ -103,3 +103,26 @@ body {
 .cell-ship-preview {
   background-color: hsl(var(--ship-placement-preview));
 }
+
+@layer utilities {
+  .animate-sunk-pulse {
+    animation: sunk-pulse 1.5s ease-out forwards;
+    position: relative; /* For z-index if needed */
+    z-index: 10; 
+  }
+
+  @keyframes sunk-pulse {
+    0% {
+      transform: scale(1);
+      box-shadow: 0 0 0 0px hsl(var(--destructive) / 0.7);
+    }
+    50% {
+      transform: scale(1.05); /* Slightly smaller scale for subtlety */
+      box-shadow: 0 0 8px 12px hsl(var(--destructive) / 0.25); /* Softer, wider shadow */
+    }
+    100% {
+      transform: scale(1);
+      box-shadow: 0 0 0 0px hsl(var(--destructive) / 0);
+    }
+  }
+}
