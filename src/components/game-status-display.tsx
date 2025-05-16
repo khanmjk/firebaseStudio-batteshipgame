@@ -1,8 +1,7 @@
-
 "use client";
 
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from '@/components/ui/card';
-import { AlertCircle, Info, ShieldCheck, Skull, Trophy, Target } from 'lucide-react';
+import { AlertCircle, Info, ShieldCheck, Skull, Trophy, Target, Brain } from 'lucide-react';
 import type { Player, GamePhase, ShotResult } from '@/types';
 import { cn } from '@/lib/utils';
 
@@ -13,6 +12,7 @@ interface GameStatusDisplayProps {
   winner?: Player | null;
   lastShotResult?: ShotResult | null;
   aiReasoning?: string | null;
+  isComputerThinking?: boolean;
 }
 
 export function GameStatusDisplay({
@@ -22,6 +22,7 @@ export function GameStatusDisplay({
   winner,
   lastShotResult,
   aiReasoning,
+  isComputerThinking,
 }: GameStatusDisplayProps) {
   
   let title = "Game Status";
@@ -42,10 +43,21 @@ export function GameStatusDisplay({
       cardVariant = "bg-destructive/10 border-destructive";
     }
   } else if (gamePhase === 'playing') {
-    title = currentPlayer === 'user' ? "Your Turn to Fire" : "Opponent's Turn";
-    Icon = currentPlayer === 'user' ? Target : AlertCircle;
-     cardVariant = currentPlayer === 'user' ? "bg-secondary/10 border-secondary" : "bg-muted/20";
+    if (isComputerThinking) {
+        title = "Opponent is Aiming...";
+        Icon = Brain;
+        cardVariant = "bg-muted/30 border-amber-500/50";
+    } else if (currentPlayer === 'user') {
+        title = "Your Turn to Fire";
+        Icon = Target;
+        cardVariant = "bg-secondary/10 border-secondary";
+    } else if (currentPlayer === 'computer') {
+        title = "Opponent's Turn"; // This state might be brief before 'isComputerThinking'
+        Icon = AlertCircle;
+        cardVariant = "bg-muted/20";
+    }
   }
+
 
   return (
     <Card className={cn("w-full shadow-xl font-mono flex-grow flex flex-col", cardVariant)}>
@@ -66,7 +78,7 @@ export function GameStatusDisplay({
             {lastShotResult.shipName && ` on ${lastShotResult.shipName}`}
           </CardDescription>
         )}
-        {aiReasoning && gamePhase === 'playing' && currentPlayer === 'computer' && (
+        {aiReasoning && (isComputerThinking || (gamePhase === 'playing' && currentPlayer === 'user' && lastShotResult?.type)) && ( // Show reasoning if AI is thinking OR if it's user's turn and AI just made a move
           <p className="text-xs italic text-muted-foreground/70 p-1.5 border border-dashed border-muted rounded-md bg-background/30 mt-1">
             Opponent Intel: "{aiReasoning}"
           </p>

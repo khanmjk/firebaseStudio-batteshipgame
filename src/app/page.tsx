@@ -142,6 +142,9 @@ export default function NavalStandoffPage() {
         toast({ title: "No Ship Selected", description: "Please select a ship to place.", variant: "default" });
         return;
     }
+    
+    let gridForPreviewDisplay = userGrid;
+    let shipStatsForPreview = shipsToPlace;
 
     const currentShipPlacingStats = shipsToPlace.find(s => s.name === shipToPlaceConfig.name);
     if (!currentShipPlacingStats || currentShipPlacingStats.placedCount >= currentShipPlacingStats.totalCount) {
@@ -151,9 +154,6 @@ export default function NavalStandoffPage() {
       return;
     }
     
-    let gridForPreviewDisplay = userGrid;
-    let shipStatsForPreview = shipsToPlace;
-
 
     if (canPlaceShip(userGrid, row, col, shipToPlaceConfig.size, orientation)) {
       const positions = getShipPositions(row, col, shipToPlaceConfig.size, orientation);
@@ -231,7 +231,9 @@ export default function NavalStandoffPage() {
 
 
   const handleComputerTurn = useCallback(async () => {
-    if (gamePhase !== 'playing' || currentPlayer !== 'computer' || isComputerThinking) return;
+    if (gamePhase !== 'playing' || currentPlayer !== 'computer' || isComputerThinking || winner) {
+        return;
+    }
 
     setIsComputerThinking(true);
     setGameMessage("Opponent is aiming...");
@@ -254,39 +256,7 @@ export default function NavalStandoffPage() {
       setAiReasoning(aiOutput.reasoning);
       
       let { row: targetRow, column: targetCol } = aiOutput;
-
-      // Server-side validation in the flow should prevent most invalid moves.
-      // This client-side check is an additional safety net but should ideally not be hit often.
-      if (targetRow < 0 || targetRow >= BOARD_SIZE || targetCol < 0 || targetCol >= BOARD_SIZE || 
-          (userGrid[targetRow][targetCol].state !== 'empty' && userGrid[targetRow][targetCol].state !== 'ship')) {
-          
-        console.warn("AI chose invalid target despite flow validation OR flow did not error. Cell:", {targetRow, targetCol, cellState: userGrid[targetRow]?.[targetCol]?.state, reasoning: aiOutput.reasoning });
-        toast({ title: "AI Recalibrating (Fallback)", description: `AI target (${String.fromCharCode(65 + targetRow)}${targetCol + 1}) invalid. Original Reason: ${aiOutput.reasoning}. Using fallback.`, variant: "default", duration: 5000});
-        
-        const availableCells: Array<[number, number]> = [];
-        for (let r = 0; r < BOARD_SIZE; r++) {
-          for (let c = 0; c < BOARD_SIZE; c++) {
-            if (userGrid[r][c].state === 'empty' || userGrid[r][c].state === 'ship') {
-              availableCells.push([r, c]);
-            }
-          }
-        }
-
-        if (availableCells.length === 0) { // Should be caught by game over check earlier
-            toast({ title: "AI Critical Error", description: "AI could not find ANY valid cell to target (board full or error). Game might be stuck.", variant: "destructive", duration: 7000});
-            setCurrentPlayer('user'); 
-            setGameMessage("Your turn. AI encountered a critical issue finding a target.");
-            setIsComputerThinking(false);
-            return;
-        }
-        
-        const randomIndex = Math.floor(Math.random() * availableCells.length);
-        const [fallbackRow, fallbackCol] = availableCells[randomIndex];
-        targetRow = fallbackRow;
-        targetCol = fallbackCol;
-        setAiReasoning(`Fallback: Randomly targeted (${String.fromCharCode(65 + targetRow)}${targetCol + 1}). Original AI reason: ${aiOutput.reasoning || 'N/A'}`);
-      }
-
+      
       const { updatedGrid, updatedShips, shotResult } = processShot(userGrid, userShips, targetRow, targetCol);
       setUserGrid(updatedGrid); 
       setUserShips(updatedShips);
@@ -308,30 +278,75 @@ export default function NavalStandoffPage() {
       }
       
     } catch (error: any) {
-      console.error("Error in handleComputerTurn:", error);
-      let errorMessage = "Could not get opponent's move. Your turn.";
+      console.error("Error in handleComputerTurn or AI flow:", error);
+      let errorMessage = "Could not get opponent's move. Performing random fallback.";
       if (error && typeof error.message === 'string') {
-        errorMessage = `AI Error: ${error.message}. Your turn.`;
+        errorMessage = `AI Error: ${error.message}. Using fallback.`;
       } else if (typeof error === 'string') {
-        errorMessage = `AI Error: ${error}. Your turn.`;
+        errorMessage = `AI Error: ${error}. Using fallback.`;
       }
       
-      setGameMessage(errorMessage);
+      setAiReasoning(`Error: ${error?.message || 'Unknown AI issue.'} Attempting fallback.`);
       toast({ 
         title: "AI Opponent Error",
         description: errorMessage,
         variant: "destructive",
         duration: 7000
       });
-      setCurrentPlayer('user'); 
+
+      const availableCells: Array<[number, number]> = [];
+      for (let r = 0; r < BOARD_SIZE; r++) {
+        for (let c = 0; c < BOARD_SIZE; c++) {
+          if (userGrid[r][c].state === 'empty' || userGrid[r][c].state === 'ship') {
+            availableCells.push([r, c]);
+          }
+        }
+      }
+
+      if (availableCells.length > 0) {
+        const randomIndex = Math.floor(Math.random() * availableCells.length);
+        const [fallbackRow, fallbackCol] = availableCells[randomIndex];
+        const { updatedGrid, updatedShips, shotResult } = processShot(userGrid, userShips, fallbackRow, fallbackCol);
+        setUserGrid(updatedGrid); 
+        setUserShips(updatedShips);
+        setLastShotResult(shotResult);
+        setGameMessage(`Opponent (fallback) fired at (${String.fromCharCode(65 + fallbackRow)}${fallbackCol + 1}). It's a ${shotResult.type.toUpperCase()}!`);
+        toast({ title: `Opponent Fallback Shot`, description: `At (${String.fromCharCode(65 + fallbackRow)}${fallbackCol+1}), Result: ${shotResult.type.toUpperCase()}`});
+
+        if (shotResult.type === 'sunk' && shotResult.shipId) {
+            setSunkShipAnimationTarget({ shipId: shotResult.shipId, board: 'user' });
+        }
+        if (checkGameOver(updatedShips)) {
+            setGamePhase('gameOver');
+            setWinner('computer');
+            setGameMessage("Game Over! The opponent has sunk all your ships (via fallback).");
+        } else {
+            setCurrentPlayer('user');
+            setGameMessage("Your turn to fire.");
+        }
+      } else {
+        toast({ title: "AI Critical Error", description: "AI could not find ANY valid cell to target (board full or error during fallback). Game might be stuck.", variant: "destructive", duration: 7000});
+        setCurrentPlayer('user'); 
+        setGameMessage("Your turn. AI encountered a critical issue finding a target.");
+      }
     } finally {
       setIsComputerThinking(false);
     }
-  }, [gamePhase, currentPlayer, isComputerThinking, userGrid, userShips, toast, setIsComputerThinking, setGameMessage, setAiReasoning, setUserGrid, setUserShips, setLastShotResult, setSunkShipAnimationTarget, setGamePhase, setWinner, setCurrentPlayer]);
+  }, [gamePhase, currentPlayer, isComputerThinking, userGrid, userShips, winner, toast, setIsComputerThinking, setGameMessage, setAiReasoning, setUserGrid, setUserShips, setLastShotResult, setSunkShipAnimationTarget, setGamePhase, setWinner, setCurrentPlayer]);
+
+  useEffect(() => {
+    if (gamePhase === 'playing' && currentPlayer === 'computer' && !winner && !isComputerThinking) {
+      setGameMessage("Opponent's turn...");
+      const timerId = setTimeout(() => {
+        handleComputerTurn();
+      }, 750); 
+      return () => clearTimeout(timerId); 
+    }
+  }, [gamePhase, currentPlayer, winner, isComputerThinking, handleComputerTurn, setGameMessage]);
 
 
   const handleUserShot = useCallback((row: number, col: number) => {
-    if (gamePhase !== 'playing' || currentPlayer !== 'user' || isComputerThinking || computerGrid[row][col].state === 'hit' || computerGrid[row][col].state === 'miss' || computerGrid[row][col].state === 'sunk') return;
+    if (gamePhase !== 'playing' || currentPlayer !== 'user' || isComputerThinking || winner || computerGrid[row][col].state === 'hit' || computerGrid[row][col].state === 'miss' || computerGrid[row][col].state === 'sunk') return;
 
     const { updatedGrid, updatedShips, shotResult } = processShot(computerGrid, computerShips, row, col);
     setComputerGrid(updatedGrid);
@@ -352,14 +367,8 @@ export default function NavalStandoffPage() {
     }
     
     setCurrentPlayer('computer');
-    setGameMessage("Opponent's turn..."); // Message before the delay
-    
-    // Automatically trigger computer's turn after a delay
-    setTimeout(() => {
-      handleComputerTurn();
-    }, 500);
 
-  }, [gamePhase, currentPlayer, computerGrid, computerShips, toast, isComputerThinking, handleComputerTurn, setComputerGrid, setComputerShips, setLastShotResult, setGameMessage, setSunkShipAnimationTarget, setGamePhase, setWinner, setCurrentPlayer]);
+  }, [gamePhase, currentPlayer, computerGrid, computerShips, winner, toast, isComputerThinking, setComputerGrid, setComputerShips, setLastShotResult, setGameMessage, setSunkShipAnimationTarget, setGamePhase, setWinner, setCurrentPlayer]);
 
 
   return (
@@ -378,8 +387,6 @@ export default function NavalStandoffPage() {
                 onCellClick={
                   gamePhase === 'setup' && selectedShipConfig
                     ? (row, col) => handlePlaceShipOnBoard(row, col, selectedShipConfig)
-                    : gamePhase === 'playing' && currentPlayer === 'user' && !isComputerThinking
-                    ? handleUserShot // Re-enable user shot on their own board is incorrect, should be on computer's board. This is a mistake from a previous merge. Will be implicitly fixed by only allowing shots on enemy board.
                     : undefined
                 }
                 onCellHover={gamePhase === 'setup' ? handleCellHover : undefined}
@@ -391,9 +398,9 @@ export default function NavalStandoffPage() {
                 }
                 isPlayerBoard={true}
                 boardTitle={gamePhase === 'setup' ? "Deploy Your Fleet" : "Your Waters"}
-                 disabled={
+                 disabled={ 
                     (gamePhase === 'setup' && (!selectedShipConfig && !allShipsPlaced)) ||
-                    (gamePhase === 'playing' && (currentPlayer !== 'user' || isComputerThinking)) ||
+                    (gamePhase === 'playing') || 
                     gamePhase === 'gameOver'
                 }
                 sunkShipAnimationTrigger={sunkShipAnimationTarget?.board === 'user' ? sunkShipAnimationTarget.shipId : null}
@@ -432,6 +439,7 @@ export default function NavalStandoffPage() {
               winner={winner}
               lastShotResult={lastShotResult}
               aiReasoning={aiReasoning}
+              isComputerThinking={isComputerThinking}
             />
           )}
         </div>
@@ -442,10 +450,10 @@ export default function NavalStandoffPage() {
             <CardContent className="p-2 sm:p-3">
               <GameBoard
                 grid={computerGrid}
-                onCellClick={gamePhase === 'playing' && currentPlayer === 'user' && !isComputerThinking ? handleUserShot : undefined}
+                onCellClick={gamePhase === 'playing' && currentPlayer === 'user' && !isComputerThinking && !winner ? handleUserShot : undefined}
                 isPlayerBoard={false}
                 boardTitle="Enemy Waters"
-                disabled={gamePhase !== 'playing' || currentPlayer !== 'user' || isComputerThinking}
+                disabled={gamePhase !== 'playing' || currentPlayer !== 'user' || isComputerThinking || !!winner}
                 sunkShipAnimationTrigger={sunkShipAnimationTarget?.board === 'computer' ? sunkShipAnimationTarget.shipId : null}
               />
             </CardContent>
@@ -477,4 +485,3 @@ export default function NavalStandoffPage() {
     </div>
   );
 }
-
