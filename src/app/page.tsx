@@ -23,6 +23,7 @@ import { Button } from '@/components/ui/button';
 import { Card, CardContent } from '@/components/ui/card';
 import { RotateCcw, Play, AlertTriangle } from 'lucide-react';
 import { useToast } from "@/hooks/use-toast";
+import { playSound } from '@/lib/audio-utils';
 
 export default function NavalStandoffPage() {
   const [userGrid, setUserGrid] = useState<GameGrid>(() => initializeGrid());
@@ -193,6 +194,7 @@ export default function NavalStandoffPage() {
            setGameMessage("All ships placed! Ready to start the game.");
          }
       }
+      playSound('place_ship.mp3');
       toast({ title: "Ship Placed", description: `${shipToPlaceConfig.name} deployed at (${String.fromCharCode(65 + row)}${col + 1}).`});
     } else {
       toast({ title: "Invalid Placement", description: "Cannot place ship here. It's out of bounds or overlaps another ship.", variant: "destructive" });
@@ -226,6 +228,7 @@ export default function NavalStandoffPage() {
     setGamePhase('playing');
     setCurrentPlayer('user');
     setGameMessage("Game started! Your turn to fire.");
+    playSound('game_start.mp3');
     setPreviewUserGrid(userGrid); 
   }, [allShipsPlaced, toast, userGrid]);
 
@@ -238,6 +241,7 @@ export default function NavalStandoffPage() {
     setIsComputerThinking(true);
     setGameMessage("Opponent is aiming...");
     setAiReasoning(null); 
+    playSound('fire_shot.mp3'); // Or a distinct enemy_fire_shot.mp3
 
     const hitCoordinates = getFiredCoordinates(userGrid).filter(coord => userGrid[coord[0]][coord[1]].state === 'hit' || userGrid[coord[0]][coord[1]].state === 'sunk');
     const missCoordinates = getFiredCoordinates(userGrid).filter(coord => userGrid[coord[0]][coord[1]].state === 'miss');
@@ -264,14 +268,18 @@ export default function NavalStandoffPage() {
       setGameMessage(`Opponent fired at (${String.fromCharCode(65 + targetRow)}${targetCol + 1}). It's a ${shotResult.type.toUpperCase()}!`);
       toast({ title: `Opponent shot at (${String.fromCharCode(65 + targetRow)}${targetCol+1})`, description: `Result: ${shotResult.type.toUpperCase()}${shotResult.shipName ? ` on your ${shotResult.shipName}` : ''}`});
 
-      if (shotResult.type === 'sunk' && shotResult.shipId) {
-        setSunkShipAnimationTarget({ shipId: shotResult.shipId, board: 'user' });
+      if (shotResult.type === 'hit') playSound('shot_hit.mp3');
+      if (shotResult.type === 'miss') playSound('shot_miss.mp3');
+      if (shotResult.type === 'sunk') {
+        playSound('ship_sunk.mp3');
+        setSunkShipAnimationTarget({ shipId: shotResult.shipId!, board: 'user' });
       }
 
       if (checkGameOver(updatedShips)) {
         setGamePhase('gameOver');
         setWinner('computer');
         setGameMessage("Game Over! The opponent has sunk all your ships.");
+        playSound('game_lose.mp3');
       } else {
         setCurrentPlayer('user');
         setGameMessage("Your turn to fire.");
@@ -294,6 +302,7 @@ export default function NavalStandoffPage() {
         duration: 7000
       });
 
+      // Fallback logic
       const availableCells: Array<[number, number]> = [];
       for (let r = 0; r < BOARD_SIZE; r++) {
         for (let c = 0; c < BOARD_SIZE; c++) {
@@ -312,14 +321,18 @@ export default function NavalStandoffPage() {
         setLastShotResult(shotResult);
         setGameMessage(`Opponent (fallback) fired at (${String.fromCharCode(65 + fallbackRow)}${fallbackCol + 1}). It's a ${shotResult.type.toUpperCase()}!`);
         toast({ title: `Opponent Fallback Shot`, description: `At (${String.fromCharCode(65 + fallbackRow)}${fallbackCol+1}), Result: ${shotResult.type.toUpperCase()}`});
-
-        if (shotResult.type === 'sunk' && shotResult.shipId) {
-            setSunkShipAnimationTarget({ shipId: shotResult.shipId, board: 'user' });
+        
+        if (shotResult.type === 'hit') playSound('shot_hit.mp3');
+        if (shotResult.type === 'miss') playSound('shot_miss.mp3');
+        if (shotResult.type === 'sunk') {
+            playSound('ship_sunk.mp3');
+            setSunkShipAnimationTarget({ shipId: shotResult.shipId!, board: 'user' });
         }
         if (checkGameOver(updatedShips)) {
             setGamePhase('gameOver');
             setWinner('computer');
             setGameMessage("Game Over! The opponent has sunk all your ships (via fallback).");
+            playSound('game_lose.mp3');
         } else {
             setCurrentPlayer('user');
             setGameMessage("Your turn to fire.");
@@ -332,7 +345,7 @@ export default function NavalStandoffPage() {
     } finally {
       setIsComputerThinking(false);
     }
-  }, [gamePhase, currentPlayer, isComputerThinking, userGrid, userShips, winner, toast, setIsComputerThinking, setGameMessage, setAiReasoning, setUserGrid, setUserShips, setLastShotResult, setSunkShipAnimationTarget, setGamePhase, setWinner, setCurrentPlayer]);
+  }, [gamePhase, currentPlayer, isComputerThinking, userGrid, userShips, winner, toast]);
 
   useEffect(() => {
     if (gamePhase === 'playing' && currentPlayer === 'computer' && !winner && !isComputerThinking) {
@@ -342,12 +355,13 @@ export default function NavalStandoffPage() {
       }, 750); 
       return () => clearTimeout(timerId); 
     }
-  }, [gamePhase, currentPlayer, winner, isComputerThinking, handleComputerTurn, setGameMessage]);
+  }, [gamePhase, currentPlayer, winner, isComputerThinking, handleComputerTurn]);
 
 
   const handleUserShot = useCallback((row: number, col: number) => {
     if (gamePhase !== 'playing' || currentPlayer !== 'user' || isComputerThinking || winner || computerGrid[row][col].state === 'hit' || computerGrid[row][col].state === 'miss' || computerGrid[row][col].state === 'sunk') return;
 
+    playSound('fire_shot.mp3');
     const { updatedGrid, updatedShips, shotResult } = processShot(computerGrid, computerShips, row, col);
     setComputerGrid(updatedGrid);
     setComputerShips(updatedShips);
@@ -355,20 +369,24 @@ export default function NavalStandoffPage() {
     setGameMessage(`You fired at (${String.fromCharCode(65 + row)}${col + 1}). It's a ${shotResult.type.toUpperCase()}!`);
     toast({ title: `Shot at (${String.fromCharCode(65 + row)}${col+1})`, description: `Result: ${shotResult.type.toUpperCase()}${shotResult.shipName ? ` on ${shotResult.shipName}` : ''}`});
 
-    if (shotResult.type === 'sunk' && shotResult.shipId) {
-        setSunkShipAnimationTarget({ shipId: shotResult.shipId, board: 'computer' });
+    if (shotResult.type === 'hit') playSound('shot_hit.mp3');
+    if (shotResult.type === 'miss') playSound('shot_miss.mp3');
+    if (shotResult.type === 'sunk') {
+        playSound('ship_sunk.mp3');
+        setSunkShipAnimationTarget({ shipId: shotResult.shipId!, board: 'computer' });
     }
 
     if (checkGameOver(updatedShips)) {
       setGamePhase('gameOver');
       setWinner('user');
       setGameMessage("Congratulations! You've sunk all enemy ships!");
+      playSound('game_win.mp3');
       return;
     }
     
     setCurrentPlayer('computer');
 
-  }, [gamePhase, currentPlayer, computerGrid, computerShips, winner, toast, isComputerThinking, setComputerGrid, setComputerShips, setLastShotResult, setGameMessage, setSunkShipAnimationTarget, setGamePhase, setWinner, setCurrentPlayer]);
+  }, [gamePhase, currentPlayer, computerGrid, computerShips, winner, toast, isComputerThinking]);
 
 
   return (
@@ -387,7 +405,7 @@ export default function NavalStandoffPage() {
                 onCellClick={
                   gamePhase === 'setup' && selectedShipConfig
                     ? (row, col) => handlePlaceShipOnBoard(row, col, selectedShipConfig)
-                    : undefined
+                    : undefined // Player cannot click their own board to shoot
                 }
                 onCellHover={gamePhase === 'setup' ? handleCellHover : undefined}
                 onCellLeave={gamePhase === 'setup' ? handleCellLeave : undefined}
@@ -399,7 +417,7 @@ export default function NavalStandoffPage() {
                 isPlayerBoard={true}
                 boardTitle={gamePhase === 'setup' ? "Deploy Your Fleet" : "Your Waters"}
                  disabled={ 
-                    (gamePhase === 'setup' && (!selectedShipConfig && !allShipsPlaced)) ||
+                    (gamePhase === 'setup' && (!selectedShipConfig && !shipsToPlace.find(s => s.placedCount < s.totalCount))) || // Disable if no ship selected or all of current type placed
                     (gamePhase === 'playing') || 
                     gamePhase === 'gameOver'
                 }
