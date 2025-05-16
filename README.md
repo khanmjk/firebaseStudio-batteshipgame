@@ -14,13 +14,13 @@ Welcome to Naval Standoff! This is a classic game of Battleship built with a mod
   - [Core Components](#core-components)
   - [Game Logic (`src/lib/game-logic.ts`)](#game-logic-srclibgame-logicts)
   - [AI Opponent (`src/ai/flows/opponent-intelligence.ts`)](#ai-opponent-srcaiflowsopponent-intelligencets)
-  - [Styling](#styling)
+  - [Styling and UX Enhancements](#styling-and-ux-enhancements)
 - [Running the Project Locally](#running-the-project-locally)
 - [Project Structure](#project-structure)
 
 ## Gameplay Instructions
 
-The game is played on two grids: "Your Waters" (where you place your ships and the AI shoots) and "Enemy Waters" (where the AI's hidden ships are, and you shoot).
+The game is played on two 10x10 grids: "Your Waters" (where you place your ships and the AI shoots) and "Enemy Waters" (where the AI's hidden ships are, and you shoot). Both grids feature row (A-J) and column (1-10) identifiers.
 
 ### Setup Phase: Deploy Your Fleet
 
@@ -34,7 +34,7 @@ The game is played on two grids: "Your Waters" (where you place your ships and t
     *   Press the **Spacebar** key while a ship is selected (before placing it) to toggle its orientation between horizontal and vertical.
     *   You can also click the "Rotate" button in the "Ship Deployment" panel.
 4.  **Placement Rules:**
-    *   Ships cannot overlap.
+    *   Ships cannot overlap with each other (though they can be placed directly adjacent).
     *   Ships must be placed entirely within the boundaries of the board.
     *   You must place all ships listed (Carrier, Battleship, Cruiser, Submarine, Destroyer).
 5.  **Start Game:**
@@ -50,10 +50,10 @@ The game is played on two grids: "Your Waters" (where you place your ships and t
 3.  **Shot Results:**
     *   **Miss:** The cell turns a muted color (e.g., green), indicating empty water. An icon representing waves appears.
     *   **Hit:** The cell turns an accent color (e.g., orange/red), indicating you've hit part of an enemy ship. An icon representing flames appears.
-    *   **Sunk:** If your hit sinks an entire enemy ship, all cells occupied by that ship will be marked as sunk (e.g., dark red/black). An icon representing a skull appears.
+    *   **Sunk:** If your hit sinks an entire enemy ship, all cells occupied by that ship will be marked as sunk (e.g., dark red/black), and a skull icon will appear. A brief animation will also play on the sunk ship's cells.
 4.  **Opponent's Turn:**
-    *   The AI opponent will take its turn automatically (or by clicking "Process Opponent's Move" if manual stepping is enabled).
-    *   The AI's shot will be marked on "Your Waters" grid with the same hit, miss, or sunk indicators.
+    *   After you fire, the AI opponent will automatically take its turn after a short delay.
+    *   The AI's shot will be marked on "Your Waters" grid with the same hit, miss, or sunk indicators (including animations for sunk ships).
     *   The AI's reasoning for its shot choice will often be displayed in the "Game Status" panel.
 
 ### Winning the Game
@@ -63,7 +63,7 @@ The game is played on two grids: "Your Waters" (where you place your ships and t
 
 ## Technical Implementation
 
-Naval Standoff is built using a modern web development stack, leveraging server-side rendering and generative AI for an enhanced experience.
+Naval Standoff is built using a modern web development stack, leveraging server-side rendering, client-side interactivity, and generative AI for an enhanced experience.
 
 ### Tech Stack
 
@@ -78,22 +78,25 @@ Naval Standoff is built using a modern web development stack, leveraging server-
 
 *   **`src/app/page.tsx` (`NavalStandoffPage`):**
     *   The main component that orchestrates the entire game.
-    *   Manages game state (grids, ships, game phase, current player, winner).
-    *   Handles user interactions for ship placement and firing shots.
-    *   Manages the computer's turn and communication with the AI flow.
+    *   Manages game state (grids, ships, game phase, current player, winner, UI states like selected ship and orientation).
+    *   Handles user interactions for ship placement (drag-and-drop, click, spacebar rotation) and firing shots.
+    *   Manages the computer's turn automation, including communication with the AI flow and fallback logic for AI errors.
+    *   Controls animations for sunk ships.
 *   **`src/components/game-board.tsx` (`GameBoard`):**
     *   Renders the 10x10 game grids for both the player and the opponent.
-    *   Displays cell states (empty, ship, hit, miss, sunk, preview) with appropriate styling and icons.
+    *   Displays cell states (empty, ship, hit, miss, sunk, preview) with appropriate styling and icons (Flame, Waves, Skull, Ship, ShieldQuestion).
     *   Handles cell click, hover, leave, and drop events for interactivity.
     *   Includes row (A-J) and column (1-10) identifiers.
+    *   Triggers a CSS animation on cells of a newly sunk ship.
 *   **`src/components/ship-placement-controls.tsx` (`ShipPlacementControls`):**
     *   Provides the UI for the ship setup phase.
-    *   Lists available ships, allows selection, and supports drag-and-drop.
+    *   Lists available ships (displaying placed/total count), allows selection by click, and supports drag-and-drop.
     *   Includes controls for rotating ships, resetting placement, and starting the game.
 *   **`src/components/game-status-display.tsx` (`GameStatusDisplay`):**
     *   Shows game-related messages, current turn information, winner announcements.
     *   Displays the AI's reasoning for its moves.
-    *   Shows the result of the last shot taken.
+    *   Shows the result of the last shot taken (using A1-style coordinates).
+    *   Relocated below "Your Waters" board during the playing phase for better visibility.
 
 ### Game Logic (`src/lib/game-logic.ts`)
 
@@ -101,10 +104,10 @@ This module contains the core, non-UI-related functions for managing the Battles
 
 *   `initializeGrid()`: Creates an empty game grid.
 *   `getShipPositions()`: Calculates the cells a ship would occupy based on its start, size, and orientation.
-*   `canPlaceShip()`: Validates if a ship can be placed at a given location without going out of bounds or overlapping existing ships.
+*   `canPlaceShip()`: Validates if a ship can be placed at a given location without going out of bounds or directly overlapping existing ships (allows adjacent placement).
 *   `placeShipOnGrid()`: Updates the grid state when a ship is placed.
 *   `placeAllComputerShips()`: Randomly places the computer's ships on its grid.
-*   `processShot()`: Updates the grid and ship states after a shot is fired, determining if it's a hit, miss, or sunk.
+*   `processShot()`: Updates the grid and ship states after a shot is fired, determining if it's a hit, miss, or sunk. Returns the ID of the sunk ship if applicable.
 *   `checkGameOver()`: Determines if all ships of a player have been sunk.
 *   `getPreviewGrid()`: Generates a temporary grid to show where a ship would be placed during setup.
 *   `getFiredCoordinates()`: Collects all coordinates that have already been targeted on a grid.
@@ -120,24 +123,27 @@ The AI opponent's intelligence is powered by Genkit, which interacts with a Goog
     *   Wraps an AI prompt defined with `ai.definePrompt`.
 *   **Prompt Engineering:**
     *   The prompt instructs the AI to act as an expert Battleship strategist.
-    *   It provides the current board state (hits and misses).
-    *   **Critical Instructions:** The prompt heavily emphasizes that the AI *must* choose coordinates that are within bounds and *have not* been previously targeted.
+    *   It provides the current board state (hits and misses, using correct Handlebars syntax for array iteration).
+    *   **Critical Instructions:** The prompt heavily emphasizes that the AI *must* choose coordinates that are within bounds (0 to `maxCoordinate`) and *have not* been previously targeted.
     *   **Strategy Guidelines:**
         *   **Targeting Mode:** If there are active (non-sunk) hits, the AI is guided to shoot adjacent cells.
         *   **Hunting Mode:** If no active hits, the AI uses patterns (like checkerboard) or random selection to find new targets.
-    *   The AI is required to explain its reasoning, especially if its initial strategic choice was invalid (e.g., already targeted).
+    *   The AI is required to explain its reasoning, especially if its initial strategic choice was invalid (e.g., already targeted), and describe how it selected a new, valid, untargeted cell.
 *   **Server-Side Validation:**
-    *   The `getTargetCoordinatesFlow` function includes server-side validation. After the LLM provides a response, the flow checks if the chosen coordinates are within bounds and if they haven't already been targeted.
-    *   If the AI's choice is invalid, the flow throws an error, which is then handled by the frontend (usually by resorting to a random valid shot as a fallback).
+    *   The `getTargetCoordinatesFlow` function includes crucial server-side validation. After the LLM provides a response, the flow explicitly checks if the chosen coordinates are within bounds and if they haven't already been targeted.
+    *   If the AI's choice is invalid, the flow throws an error with a descriptive message. This error is caught by the frontend, which then resorts to a random valid shot as a fallback.
 *   **Invoking the AI:**
     *   The `NavalStandoffPage` component calls the exported `getTargetCoordinates(input)` function, which in turn executes the Genkit flow.
 
-### Styling
+### Styling and UX Enhancements
 
-*   **`src/app/globals.css`:** Defines the base Tailwind CSS layers, global HSL CSS variables for theming (dark theme focused), and custom game-specific styles (e.g., `cell-miss`, `cell-ship-preview`).
+*   **`src/app/globals.css`:** Defines the base Tailwind CSS layers, global HSL CSS variables for theming (dark theme focused), custom game-specific styles (e.g., `cell-miss`, `cell-ship-preview`), and a `sunk-pulse` animation for when ships are sunk.
 *   **Tailwind CSS:** Utility classes are used extensively throughout the components for styling.
-*   **ShadCN UI Components:** These components come with their own styling, which is customized via the HSL variables in `globals.css`.
-*   **Lucide React Icons:** Used for iconography throughout the application (e.g., ship, flame, skull icons).
+*   **ShadCN UI Components:** These components come with their own styling, customized via HSL variables.
+*   **Lucide React Icons:** Used for iconography (Ship, Flame, Waves, Skull, ShieldQuestion).
+*   **Layout:** The game page uses a two-column layout on larger screens for balanced presentation and is designed to fit within the viewport without scrolling.
+*   **Visibility:** Board titles and other text elements have improved color contrast.
+*   **Animations:** A subtle pulse animation plays on a ship's cells when it's sunk.
 
 ## Running the Project Locally
 
@@ -189,7 +195,7 @@ A brief overview of key directories:
     *   `flows/`: Contains Genkit flow definitions (e.g., `opponent-intelligence.ts`).
 *   **`src/types/`:** TypeScript type definitions for the game.
 *   **`public/`:** Static assets (though not heavily used in this project beyond a potential favicon).
-*   **`src/hooks/`:** Custom React hooks (e.g., `useToast.ts`).
+*   **`src/hooks/`:** Custom React hooks (e.g., `useToast.ts`, `useMobile.ts`).
 
 ---
 
